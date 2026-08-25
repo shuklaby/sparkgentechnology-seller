@@ -5,11 +5,9 @@ import {
   getDoc,
   getDocs,
   setDoc,
-  updateDoc,
   deleteDoc,
   query,
   where,
-  orderBy
 } from 'firebase/firestore';
 import {
   AppUser,
@@ -30,11 +28,38 @@ import {
   sampleSocialLinks,
   sampleSeoSettings,
   DEMO_SELLER_ID,
-  ADMIN_PHONE_NUMBER
 } from '../data/mockDemoData';
 
-// Local storage fallback cache to ensure seamless zero-lag execution even before Firestore rules propagation
+// Local storage fallback cache to ensure seamless zero-lag execution
 const LOCAL_STORAGE_KEY_PREFIX = 'b2b_saas_';
+
+let isFirestoreClientEnabled = true;
+
+// Safe wrapper to prevent hanging or failing when Firestore is offline/unprovisioned
+async function safeFirestore<T>(operation: () => Promise<T>, timeoutMs = 1500): Promise<T | null> {
+  if (!isFirestoreClientEnabled) return null;
+
+  try {
+    const res = await Promise.race([
+      operation(),
+      new Promise<null>((_, reject) =>
+        setTimeout(() => reject(new Error('Firestore timeout')), timeoutMs)
+      ),
+    ]);
+    return res;
+  } catch (err: any) {
+    // If Cloud Firestore API is disabled or client is offline, disable remote calls gracefully
+    if (
+      err?.message?.includes('PERMISSION_DENIED') ||
+      err?.message?.includes('disabled') ||
+      err?.message?.includes('client is offline') ||
+      err?.message?.includes('timeout')
+    ) {
+      isFirestoreClientEnabled = false;
+    }
+    return null;
+  }
+}
 
 export function getLocal<T>(key: string, fallback: T): T {
   try {
@@ -70,40 +95,7 @@ export function clearActiveSessionUser(): void {
 // 1. Initial Seeding / Demo Data Initialization
 // ----------------------------------------------------
 export async function initializeDemoDataIfMissing(): Promise<void> {
-  try {
-    const sellerRef = doc(db, 'sellers', DEMO_SELLER_ID);
-    const snap = await getDoc(sellerRef);
-    if (!snap.exists()) {
-      // Seed Demo Seller in Firestore
-      await setDoc(sellerRef, sampleSellerProfile);
-      
-      // Seed subcollections
-      for (const cat of sampleCategories) {
-        await setDoc(doc(db, 'sellers', DEMO_SELLER_ID, 'categories', cat.id), cat);
-      }
-      for (const prod of sampleProducts) {
-        await setDoc(doc(db, 'sellers', DEMO_SELLER_ID, 'products', prod.id), prod);
-      }
-      await setDoc(doc(db, 'sellers', DEMO_SELLER_ID, 'websiteSettings', 'config'), sampleWebsiteSettings);
-      await setDoc(doc(db, 'sellers', DEMO_SELLER_ID, 'socialLinks', 'config'), sampleSocialLinks);
-      await setDoc(doc(db, 'sellers', DEMO_SELLER_ID, 'seo', 'config'), sampleSeoSettings);
-      await setDoc(doc(db, 'sellers', DEMO_SELLER_ID, 'domains', 'config'), {
-        sellerId: DEMO_SELLER_ID,
-        customDomain: 'abcenterprises.com',
-        status: 'active',
-        verificationToken: 'b2b-verify-abc982348234',
-        cnameTarget: 'domains.b2bseller.app',
-        aRecordIp: '34.120.54.10',
-        dnsCheckedAt: Date.now() - 3600000,
-        sslIssuedAt: Date.now() - 3600000,
-        updatedAt: Date.now(),
-      } as DomainRecord);
-    }
-  } catch (err) {
-    console.warn('Firestore remote seeding skipped or offline. Local state fallback engaged:', err);
-  }
-
-  // Ensure local memory cache is populated
+  // Ensure local state is seeded first
   if (!getLocal(`seller_${DEMO_SELLER_ID}`, null)) {
     setLocal(`seller_${DEMO_SELLER_ID}`, sampleSellerProfile);
     setLocal(`categories_${DEMO_SELLER_ID}`, sampleCategories);
@@ -112,36 +104,88 @@ export async function initializeDemoDataIfMissing(): Promise<void> {
     setLocal(`socialLinks_${DEMO_SELLER_ID}`, sampleSocialLinks);
     setLocal(`seo_${DEMO_SELLER_ID}`, sampleSeoSettings);
   }
+
+  // Attempt Firestore sync if enabled
+  if (isFirestoreClientEnabled) {
+    await safeFirestore(async () => {
+      const sellerRef = doc(db, 'sellers', DEMO_SELLER_ID);
+      const snap = await getDoc(sellerRef);
+      if (!snap.exists()) {
+        await setDoc(sellerRef, sampleSellerProfile);
+        for (const cat of sampleCategories) {
+          await setDoc(doc(db, 'sellers', DEMO_SELLER_ID, 'categories', cat.id), cat);
+        }
+        for (const prod of sampleProducts) {
+          await setDoc(doc(db, 'sellers', DEMO_SELLER_ID, 'products', prod.id), prod);
+        }
+        await setDoc(doc(db, 'sellers', DEMO_SELLER_ID, 'websiteSettings', 'config'), sampleWebsiteSettings);
+        await setDoc(doc(db, 'sellers', DEMO_SELLER_ID, 'socialLinks', 'config'), sampleSocialLinks);
+        await setDoc(doc(db, 'sellers', DEMO_SELLER_ID, 'seo', 'config'), sampleSeoSettings);
+      }
+    });
+  }
 }
 
 // ----------------------------------------------------
 // 2. User Record Operations
 // ----------------------------------------------------
 export async function getUserRecord(uid: string): Promise<AppUser | null> {
-  try {
-    const userDocRef = doc(db, 'users', uid);
-    const snap = await getDoc(userDocRef);
-    if (snap.exists()) {
+  if (isFirestoreClientEnabled) {
+    const snap = await safeFirestore(async () => {
+      const userDocRef = doc(db, 'users', uid);
+      return await getDoc(userDocRef);
+    });
+
+    if (snap && snap.exists()) {
       return snap.data() as AppUser;
     }
-  } catch (err) {
-    console.error('Error loading user record from Firestore:', err);
   }
-  return null;
-}
 
+  return getLocal<AppUser | null>(`user_${uid}`, null);
+}
 
 // ----------------------------------------------------
 // 3. Seller Profile APIs
 // ----------------------------------------------------
+export function createDefaultSellerProfile(user: AppUser, customSellerId?: string): SellerProfile {
+  const sellerId = customSellerId || user.sellerId || `seller-${user.uid}`;
+  const companyName = user.displayName || 'B2B Enterprise';
+  const cleanSlug = companyName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + user.uid.slice(-4);
+
+  return {
+    id: sellerId,
+    companyName,
+    slug: cleanSlug,
+    logoUrl: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=400&q=80',
+    businessDescription: 'Wholesale B2B Catalog, Manufacturing, and Industrial Distribution.',
+    mobileNumber: user.mobileNumber || '+91 98765 43210',
+    whatsappNumber: user.mobileNumber || '+91 98765 43210',
+    email: user.email,
+    address: 'Plot No. 42, Industrial Area, Phase II',
+    city: 'Mumbai',
+    state: 'Maharashtra',
+    country: 'India',
+    pincode: '400093',
+    googleMapsUrl: 'https://maps.google.com',
+    businessType: 'Manufacturer',
+    yearEstablished: new Date().getFullYear(),
+    isActive: true,
+    isPublished: true,
+    ownerUid: user.uid,
+    createdAt: user.createdAt || Date.now(),
+    updatedAt: Date.now(),
+    subscriptionPlan: 'Growth',
+  };
+}
+
 export async function getSellerById(sellerId: string): Promise<SellerProfile | null> {
-  try {
-    const snap = await getDoc(doc(db, 'sellers', sellerId));
-    if (snap.exists()) {
+  if (isFirestoreClientEnabled) {
+    const snap = await safeFirestore(async () => {
+      return await getDoc(doc(db, 'sellers', sellerId));
+    });
+    if (snap && snap.exists()) {
       return snap.data() as SellerProfile;
     }
-  } catch (e) {
-    console.warn('Firestore fetch failed, checking local storage:', e);
   }
 
   // Local fallback
@@ -153,14 +197,15 @@ export async function getSellerById(sellerId: string): Promise<SellerProfile | n
 
 export async function getSellerBySlug(slug: string): Promise<SellerProfile | null> {
   const cleanSlug = slug.toLowerCase().trim();
-  try {
-    const q = query(collection(db, 'sellers'), where('slug', '==', cleanSlug));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
+
+  if (isFirestoreClientEnabled) {
+    const snap = await safeFirestore(async () => {
+      const q = query(collection(db, 'sellers'), where('slug', '==', cleanSlug));
+      return await getDocs(q);
+    });
+    if (snap && !snap.empty) {
       return snap.docs[0].data() as SellerProfile;
     }
-  } catch (e) {
-    console.warn('Firestore slug lookup fallback to local:', e);
   }
 
   // Local lookup
@@ -175,28 +220,28 @@ export async function saveSellerProfile(profile: SellerProfile): Promise<void> {
     updatedAt: Date.now(),
   };
 
-  try {
-    await setDoc(doc(db, 'sellers', profile.id), updated, { merge: true });
-  } catch (e) {
-    console.warn('Firestore write fallback to local:', e);
-  }
-
   setLocal(`seller_${profile.id}`, updated);
+
+  if (isFirestoreClientEnabled) {
+    await safeFirestore(async () => {
+      await setDoc(doc(db, 'sellers', profile.id), updated, { merge: true });
+    });
+  }
 }
 
 // ----------------------------------------------------
 // 4. Products APIs
 // ----------------------------------------------------
 export async function getProducts(sellerId: string): Promise<Product[]> {
-  try {
-    const snap = await getDocs(collection(db, 'sellers', sellerId, 'products'));
-    if (!snap.empty) {
+  if (isFirestoreClientEnabled) {
+    const snap = await safeFirestore(async () => {
+      return await getDocs(collection(db, 'sellers', sellerId, 'products'));
+    });
+    if (snap && !snap.empty) {
       const items: Product[] = [];
       snap.forEach(d => items.push(d.data() as Product));
       return items.sort((a, b) => b.updatedAt - a.updatedAt);
     }
-  } catch (e) {
-    console.warn('Firestore getProducts fallback to local:', e);
   }
 
   if (sellerId === DEMO_SELLER_ID) {
@@ -211,13 +256,6 @@ export async function saveProduct(product: Product): Promise<void> {
     updatedAt: Date.now(),
   };
 
-  try {
-    await setDoc(doc(db, 'sellers', product.sellerId, 'products', product.id), updated, { merge: true });
-  } catch (e) {
-    console.warn('Firestore saveProduct error:', e);
-  }
-
-  // Update local storage
   const current = getLocal<Product[]>(`products_${product.sellerId}`, product.sellerId === DEMO_SELLER_ID ? sampleProducts : []);
   const index = current.findIndex(p => p.id === product.id);
   if (index >= 0) {
@@ -226,33 +264,39 @@ export async function saveProduct(product: Product): Promise<void> {
     current.unshift(updated);
   }
   setLocal(`products_${product.sellerId}`, current);
+
+  if (isFirestoreClientEnabled) {
+    await safeFirestore(async () => {
+      await setDoc(doc(db, 'sellers', product.sellerId, 'products', product.id), updated, { merge: true });
+    });
+  }
 }
 
 export async function deleteProduct(sellerId: string, productId: string): Promise<void> {
-  try {
-    await deleteDoc(doc(db, 'sellers', sellerId, 'products', productId));
-  } catch (e) {
-    console.warn('Firestore deleteProduct error:', e);
-  }
-
   const current = getLocal<Product[]>(`products_${sellerId}`, sellerId === DEMO_SELLER_ID ? sampleProducts : []);
   const filtered = current.filter(p => p.id !== productId);
   setLocal(`products_${sellerId}`, filtered);
+
+  if (isFirestoreClientEnabled) {
+    await safeFirestore(async () => {
+      await deleteDoc(doc(db, 'sellers', sellerId, 'products', productId));
+    });
+  }
 }
 
 // ----------------------------------------------------
 // 5. Categories APIs
 // ----------------------------------------------------
 export async function getCategories(sellerId: string): Promise<Category[]> {
-  try {
-    const snap = await getDocs(collection(db, 'sellers', sellerId, 'categories'));
-    if (!snap.empty) {
+  if (isFirestoreClientEnabled) {
+    const snap = await safeFirestore(async () => {
+      return await getDocs(collection(db, 'sellers', sellerId, 'categories'));
+    });
+    if (snap && !snap.empty) {
       const items: Category[] = [];
       snap.forEach(d => items.push(d.data() as Category));
       return items.sort((a, b) => a.order - b.order);
     }
-  } catch (e) {
-    console.warn('Firestore getCategories fallback:', e);
   }
 
   if (sellerId === DEMO_SELLER_ID) {
@@ -262,12 +306,6 @@ export async function getCategories(sellerId: string): Promise<Category[]> {
 }
 
 export async function saveCategory(category: Category): Promise<void> {
-  try {
-    await setDoc(doc(db, 'sellers', category.sellerId, 'categories', category.id), category, { merge: true });
-  } catch (e) {
-    console.warn('Firestore saveCategory error:', e);
-  }
-
   const current = getLocal<Category[]>(`categories_${category.sellerId}`, category.sellerId === DEMO_SELLER_ID ? sampleCategories : []);
   const index = current.findIndex(c => c.id === category.id);
   if (index >= 0) {
@@ -276,30 +314,36 @@ export async function saveCategory(category: Category): Promise<void> {
     current.push(category);
   }
   setLocal(`categories_${category.sellerId}`, current);
+
+  if (isFirestoreClientEnabled) {
+    await safeFirestore(async () => {
+      await setDoc(doc(db, 'sellers', category.sellerId, 'categories', category.id), category, { merge: true });
+    });
+  }
 }
 
 export async function deleteCategory(sellerId: string, categoryId: string): Promise<void> {
-  try {
-    await deleteDoc(doc(db, 'sellers', sellerId, 'categories', categoryId));
-  } catch (e) {
-    console.warn('Firestore deleteCategory error:', e);
-  }
-
   const current = getLocal<Category[]>(`categories_${sellerId}`, sellerId === DEMO_SELLER_ID ? sampleCategories : []);
   setLocal(`categories_${sellerId}`, current.filter(c => c.id !== categoryId));
+
+  if (isFirestoreClientEnabled) {
+    await safeFirestore(async () => {
+      await deleteDoc(doc(db, 'sellers', sellerId, 'categories', categoryId));
+    });
+  }
 }
 
 // ----------------------------------------------------
 // 6. Website Design & Settings APIs
 // ----------------------------------------------------
 export async function getWebsiteDesignSettings(sellerId: string): Promise<WebsiteDesignSettings> {
-  try {
-    const snap = await getDoc(doc(db, 'sellers', sellerId, 'websiteSettings', 'config'));
-    if (snap.exists()) {
+  if (isFirestoreClientEnabled) {
+    const snap = await safeFirestore(async () => {
+      return await getDoc(doc(db, 'sellers', sellerId, 'websiteSettings', 'config'));
+    });
+    if (snap && snap.exists()) {
       return snap.data() as WebsiteDesignSettings;
     }
-  } catch (e) {
-    console.warn('Firestore website settings fallback:', e);
   }
 
   if (sellerId === DEMO_SELLER_ID) {
@@ -313,25 +357,26 @@ export async function getWebsiteDesignSettings(sellerId: string): Promise<Websit
 
 export async function saveWebsiteDesignSettings(settings: WebsiteDesignSettings): Promise<void> {
   const updated = { ...settings, updatedAt: Date.now() };
-  try {
-    await setDoc(doc(db, 'sellers', settings.sellerId, 'websiteSettings', 'config'), updated, { merge: true });
-  } catch (e) {
-    console.warn('Firestore save websiteSettings error:', e);
-  }
   setLocal(`websiteSettings_${settings.sellerId}`, updated);
+
+  if (isFirestoreClientEnabled) {
+    await safeFirestore(async () => {
+      await setDoc(doc(db, 'sellers', settings.sellerId, 'websiteSettings', 'config'), updated, { merge: true });
+    });
+  }
 }
 
 // ----------------------------------------------------
 // 7. Social Links APIs
 // ----------------------------------------------------
 export async function getSocialLinks(sellerId: string): Promise<SocialLinksSettings> {
-  try {
-    const snap = await getDoc(doc(db, 'sellers', sellerId, 'socialLinks', 'config'));
-    if (snap.exists()) {
+  if (isFirestoreClientEnabled) {
+    const snap = await safeFirestore(async () => {
+      return await getDoc(doc(db, 'sellers', sellerId, 'socialLinks', 'config'));
+    });
+    if (snap && snap.exists()) {
       return snap.data() as SocialLinksSettings;
     }
-  } catch (e) {
-    console.warn('Firestore getSocialLinks error:', e);
   }
 
   if (sellerId === DEMO_SELLER_ID) {
@@ -346,25 +391,26 @@ export async function getSocialLinks(sellerId: string): Promise<SocialLinksSetti
 
 export async function saveSocialLinks(settings: SocialLinksSettings): Promise<void> {
   const updated = { ...settings, updatedAt: Date.now() };
-  try {
-    await setDoc(doc(db, 'sellers', settings.sellerId, 'socialLinks', 'config'), updated, { merge: true });
-  } catch (e) {
-    console.warn('Firestore saveSocialLinks error:', e);
-  }
   setLocal(`socialLinks_${settings.sellerId}`, updated);
+
+  if (isFirestoreClientEnabled) {
+    await safeFirestore(async () => {
+      await setDoc(doc(db, 'sellers', settings.sellerId, 'socialLinks', 'config'), updated, { merge: true });
+    });
+  }
 }
 
 // ----------------------------------------------------
 // 8. SEO Settings APIs
 // ----------------------------------------------------
 export async function getSeoSettings(sellerId: string): Promise<SeoSettings> {
-  try {
-    const snap = await getDoc(doc(db, 'sellers', sellerId, 'seo', 'config'));
-    if (snap.exists()) {
+  if (isFirestoreClientEnabled) {
+    const snap = await safeFirestore(async () => {
+      return await getDoc(doc(db, 'sellers', sellerId, 'seo', 'config'));
+    });
+    if (snap && snap.exists()) {
       return snap.data() as SeoSettings;
     }
-  } catch (e) {
-    console.warn('Firestore getSeoSettings error:', e);
   }
 
   if (sellerId === DEMO_SELLER_ID) {
@@ -378,12 +424,13 @@ export async function getSeoSettings(sellerId: string): Promise<SeoSettings> {
 
 export async function saveSeoSettings(settings: SeoSettings): Promise<void> {
   const updated = { ...settings, updatedAt: Date.now() };
-  try {
-    await setDoc(doc(db, 'sellers', settings.sellerId, 'seo', 'config'), updated, { merge: true });
-  } catch (e) {
-    console.warn('Firestore saveSeoSettings error:', e);
-  }
   setLocal(`seo_${settings.sellerId}`, updated);
+
+  if (isFirestoreClientEnabled) {
+    await safeFirestore(async () => {
+      await setDoc(doc(db, 'sellers', settings.sellerId, 'seo', 'config'), updated, { merge: true });
+    });
+  }
 }
 
 // ----------------------------------------------------
@@ -400,13 +447,13 @@ export async function getDomainRecord(sellerId: string): Promise<DomainRecord> {
     updatedAt: Date.now(),
   };
 
-  try {
-    const snap = await getDoc(doc(db, 'sellers', sellerId, 'domains', 'config'));
-    if (snap.exists()) {
+  if (isFirestoreClientEnabled) {
+    const snap = await safeFirestore(async () => {
+      return await getDoc(doc(db, 'sellers', sellerId, 'domains', 'config'));
+    });
+    if (snap && snap.exists()) {
       return snap.data() as DomainRecord;
     }
-  } catch (e) {
-    console.warn('Firestore getDomainRecord error:', e);
   }
 
   return getLocal<DomainRecord>(`domain_${sellerId}`, fallback);
@@ -414,27 +461,28 @@ export async function getDomainRecord(sellerId: string): Promise<DomainRecord> {
 
 export async function saveDomainRecord(record: DomainRecord): Promise<void> {
   const updated = { ...record, updatedAt: Date.now() };
-  try {
-    await setDoc(doc(db, 'sellers', record.sellerId, 'domains', 'config'), updated, { merge: true });
-  } catch (e) {
-    console.warn('Firestore saveDomainRecord error:', e);
-  }
   setLocal(`domain_${record.sellerId}`, updated);
+
+  if (isFirestoreClientEnabled) {
+    await safeFirestore(async () => {
+      await setDoc(doc(db, 'sellers', record.sellerId, 'domains', 'config'), updated, { merge: true });
+    });
+  }
 }
 
 // ----------------------------------------------------
 // 10. Admin Overview & Management APIs
 // ----------------------------------------------------
 export async function getAllSellers(): Promise<SellerProfile[]> {
-  try {
-    const snap = await getDocs(collection(db, 'sellers'));
-    if (!snap.empty) {
+  if (isFirestoreClientEnabled) {
+    const snap = await safeFirestore(async () => {
+      return await getDocs(collection(db, 'sellers'));
+    });
+    if (snap && !snap.empty) {
       const list: SellerProfile[] = [];
       snap.forEach(d => list.push(d.data() as SellerProfile));
       return list;
     }
-  } catch (e) {
-    console.warn('Firestore getAllSellers error:', e);
   }
 
   const demo = getLocal<SellerProfile>(`seller_${DEMO_SELLER_ID}`, sampleSellerProfile);

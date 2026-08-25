@@ -15,6 +15,8 @@ import {
   getUserRecord,
   getSellerById,
   getSellerBySlug,
+  saveSellerProfile,
+  createDefaultSellerProfile,
   getProducts,
   getCategories,
   getWebsiteDesignSettings,
@@ -23,7 +25,7 @@ import {
   getLocal,
   clearActiveSessionUser
 } from './lib/dbService';
-import { verifyCurrentSession, logoutUser } from './lib/authService';
+import { verifyCurrentSession, logoutUser, getStoredUser } from './lib/authService';
 import { AuthModal } from './components/AuthModal';
 import { AdminDashboard } from './components/AdminDashboard';
 import { SellerDashboard } from './components/SellerDashboard';
@@ -60,19 +62,23 @@ export default function App() {
           setCurrentUser(sessionRes.user);
           if (sessionRes.seller) {
             setCurrentSeller(sessionRes.seller);
-          } else if (sessionRes.user.role === 'SELLER' && sessionRes.user.sellerId) {
-            const sellerObj = await getSellerById(sessionRes.user.sellerId);
-            if (sellerObj) setCurrentSeller(sellerObj);
+          } else if (sessionRes.user.role === 'SELLER' || sessionRes.user.role === 'EMPLOYEE') {
+            const sid = sessionRes.user.sellerId || `seller-${sessionRes.user.uid}`;
+            let sellerObj = await getSellerById(sid);
+            if (!sellerObj) {
+              sellerObj = createDefaultSellerProfile(sessionRes.user, sid);
+              await saveSellerProfile(sellerObj);
+            }
+            setCurrentSeller(sellerObj);
           }
         } else {
           // Fallback to local session storage cache if server response is not available
-          const cachedUser = getLocal<AppUser | null>('active_session_user', null);
+          const cachedUser = getStoredUser() || getLocal<AppUser | null>('active_session_user', null);
           if (cachedUser) {
             setCurrentUser(cachedUser);
-            if (cachedUser.role === 'SELLER' && cachedUser.sellerId) {
-              const sellerObj = await getSellerById(cachedUser.sellerId);
-              if (sellerObj) setCurrentSeller(sellerObj);
-            }
+            const sid = cachedUser.sellerId || `seller-${cachedUser.uid}`;
+            const sellerObj = await getSellerById(sid);
+            if (sellerObj) setCurrentSeller(sellerObj);
           } else {
             setCurrentUser(null);
             setCurrentSeller(null);
@@ -105,7 +111,12 @@ export default function App() {
           setAuthModalOpen(true);
         }
       } else if (hash === '#/seller') {
-        if ((currentUser?.role === 'SELLER' || currentUser?.role === 'EMPLOYEE' || currentUser?.role === 'ADMIN') && currentSeller) {
+        if (currentUser?.role === 'SELLER' || currentUser?.role === 'EMPLOYEE' || currentUser?.role === 'ADMIN') {
+          if (!currentSeller && currentUser.sellerId) {
+            getSellerById(currentUser.sellerId).then((s) => {
+              if (s) setCurrentSeller(s);
+            });
+          }
           setCurrentView('SELLER');
         } else {
           setAuthModalRole('SELLER');
@@ -149,14 +160,23 @@ export default function App() {
     }
   };
 
-  const handleAuthSuccess = (user: AppUser, seller?: SellerProfile) => {
+  const handleAuthSuccess = async (user: AppUser, seller?: SellerProfile) => {
     setCurrentUser(user);
     setAuthModalOpen(false);
     if (user.role === 'ADMIN') {
       setCurrentView('ADMIN');
       window.location.hash = '#/admin';
     } else {
-      if (seller) setCurrentSeller(seller);
+      let targetSeller: SellerProfile | null = seller || null;
+      if (!targetSeller && user.sellerId) {
+        targetSeller = await getSellerById(user.sellerId);
+      }
+      if (!targetSeller) {
+        const sid = user.sellerId || `seller-${user.uid}`;
+        targetSeller = createDefaultSellerProfile(user, sid);
+        await saveSellerProfile(targetSeller);
+      }
+      setCurrentSeller(targetSeller);
       setCurrentView('SELLER');
       window.location.hash = '#/seller';
     }
@@ -210,12 +230,21 @@ export default function App() {
       )}
 
       {/* VIEW: SELLER PORTAL */}
-      {currentView === 'SELLER' && currentSeller && (
-        <SellerDashboard
-          seller={currentSeller}
-          onUpdateSeller={(updated) => setCurrentSeller(updated)}
-          onLogout={handleLogout}
-        />
+      {currentView === 'SELLER' && (
+        currentSeller ? (
+          <SellerDashboard
+            seller={currentSeller}
+            onUpdateSeller={(updated) => setCurrentSeller(updated)}
+            onLogout={handleLogout}
+          />
+        ) : (
+          <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center p-6 text-slate-700">
+            <div className="flex flex-col items-center gap-3 bg-white p-8 rounded-xl shadow-sm border border-slate-200">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+              <p className="text-sm font-medium text-slate-600">Preparing Seller Workspace...</p>
+            </div>
+          </div>
+        )
       )}
 
       {/* VIEW: PUBLIC SELLER WEBSITE (/site/{slug}) */}

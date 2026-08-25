@@ -5,30 +5,39 @@ import { GoogleGenAI, Type } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 import {
   initializeInitialUsers,
-  findUserByEmail,
-  findUserById,
+  findUserByEmailAsync,
+  findUserByIdAsync,
   verifyPassword,
   createSessionToken,
   verifySessionToken,
-  getAllUsers,
-  createUser,
-  updateUser,
-  resetUserPassword,
-  deleteUser,
+  getAllUsersAsync,
+  createUserAsync,
+  updateUserAsync,
+  resetUserPasswordAsync,
+  deleteUserAsync,
   recordLoginSuccess,
-  sanitizeUser
+  sanitizeUser,
+  getSellerProfileForUser,
 } from './server/authStore';
 
 dotenv.config();
 
 // Seed initial admin and demo users
-initializeInitialUsers();
+initializeInitialUsers().catch((err) => {
+  console.warn('[Server Boot] Seeding warning:', err);
+});
 
 // Initialize Express
 const app = express();
 const PORT = 3000;
 
 app.use(express.json({ limit: '10mb' }));
+
+// Ensure all /api responses default to JSON
+app.use('/api', (req, res, next) => {
+  res.setHeader('Content-Type', 'application/json');
+  next();
+});
 
 // ----------------------------------------------------
 // Authentication & Role Middleware
@@ -43,23 +52,23 @@ interface AuthRequest extends Request {
   };
 }
 
-function authenticateToken(req: AuthRequest, res: Response, next: NextFunction) {
+async function authenticateToken(req: AuthRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null;
 
   if (!token) {
-    return res.status(401).json({ error: 'Authentication required. Please log in.' });
+    return res.status(401).json({ success: false, error: 'Authentication required. Please log in.' });
   }
 
   const session = verifySessionToken(token);
   if (!session) {
-    return res.status(401).json({ error: 'Session expired or invalid. Please log in again.' });
+    return res.status(401).json({ success: false, error: 'Session expired or invalid. Please log in again.' });
   }
 
   // Check if user still exists and is active in DB
-  const user = findUserById(session.uid);
+  const user = await findUserByIdAsync(session.uid);
   if (!user || user.status !== 'ACTIVE') {
-    return res.status(403).json({ error: 'Your account is deactivated or no longer exists.' });
+    return res.status(403).json({ success: false, error: 'Your account is deactivated or no longer exists.' });
   }
 
   req.user = {
@@ -75,7 +84,7 @@ function authenticateToken(req: AuthRequest, res: Response, next: NextFunction) 
 
 function requireAdmin(req: AuthRequest, res: Response, next: NextFunction) {
   if (!req.user || req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: 'Access denied. Administrator privileges required.' });
+    return res.status(403).json({ success: false, error: 'Access denied. Administrator privileges required.' });
   }
   next();
 }
@@ -90,50 +99,57 @@ app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ error: 'Email/User ID and password are required.' });
+      return res.status(400).json({ success: false, error: 'Email/User ID and password are required.' });
     }
 
-    const user = findUserByEmail(email);
+    const user = await findUserByEmailAsync(email);
     if (!user) {
-      // Generic error to prevent enumeration
-      return res.status(401).json({ error: 'Invalid Email/User ID or Password.' });
+      // Return 401 with standard JSON error message
+      return res.status(401).json({ success: false, error: 'Invalid Email/User ID or Password.' });
     }
 
     if (user.status !== 'ACTIVE') {
       return res.status(403).json({
+        success: false,
         error: 'Your account has been deactivated. Please contact an administrator for assistance.',
       });
     }
 
     const isMatch = verifyPassword(password, user.passwordHash, user.salt);
     if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid Email/User ID or Password.' });
+      return res.status(401).json({ success: false, error: 'Invalid Email/User ID or Password.' });
     }
 
     recordLoginSuccess(user.uid);
     const sanitized = sanitizeUser(user);
     const token = createSessionToken(sanitized);
+    const seller = await getSellerProfileForUser(sanitized);
 
     return res.json({
       success: true,
       token,
       user: sanitized,
+      seller,
     });
   } catch (err: any) {
-    console.error('Login error:', err);
-    return res.status(500).json({ error: 'An unexpected authentication error occurred.' });
+    console.error('[API Login Error]:', err);
+    return res.status(500).json({ success: false, error: 'An unexpected authentication error occurred.' });
   }
 });
 
 // 2. Verify Active Session
-app.get('/api/auth/session', authenticateToken, (req: AuthRequest, res: Response) => {
-  const user = findUserById(req.user!.uid);
+app.get('/api/auth/session', authenticateToken, async (req: AuthRequest, res: Response) => {
+  const user = await findUserByIdAsync(req.user!.uid);
   if (!user) {
-    return res.status(404).json({ error: 'User profile not found.' });
+    return res.status(404).json({ success: false, error: 'User profile not found.' });
   }
+  const sanitized = sanitizeUser(user);
+  const seller = await getSellerProfileForUser(sanitized);
+
   return res.json({
     success: true,
-    user: sanitizeUser(user),
+    user: sanitized,
+    seller,
   });
 });
 
@@ -142,16 +158,15 @@ app.post('/api/auth/forgot-password', (req, res) => {
   try {
     const { email } = req.body;
     if (!email || typeof email !== 'string' || !email.includes('@')) {
-      return res.status(400).json({ error: 'Please enter a valid email address.' });
+      return res.status(400).json({ success: false, error: 'Please enter a valid email address.' });
     }
 
-    // Security best practice: Always return generic success message without leaking account existence
     return res.json({
       success: true,
       message: 'If an account exists with this email address, password reset instructions have been dispatched.',
     });
   } catch (err: any) {
-    return res.status(500).json({ error: 'Failed to process password reset request.' });
+    return res.status(500).json({ success: false, error: 'Failed to process password reset request.' });
   }
 });
 
@@ -160,34 +175,37 @@ app.post('/api/auth/forgot-password', (req, res) => {
 // ----------------------------------------------------
 
 // 1. List all users (Admin only)
-app.get('/api/users', authenticateToken, requireAdmin, (req, res) => {
+app.get('/api/users', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const users = getAllUsers();
+    const users = await getAllUsersAsync();
     return res.json({ success: true, users });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Failed to retrieve users.' });
+    return res.status(500).json({ success: false, error: err.message || 'Failed to retrieve users.' });
   }
 });
 
 // 2. Create User (Admin only)
-app.post('/api/users', authenticateToken, requireAdmin, (req, res) => {
+app.post('/api/users', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { displayName, email, password, role, status, mobileNumber, sellerId } = req.body;
 
     if (!displayName || !displayName.trim()) {
-      return res.status(400).json({ error: 'Full Name is required.' });
+      return res.status(400).json({ success: false, error: 'Full Name is required.' });
     }
     if (!email || !email.trim() || !email.includes('@')) {
-      return res.status(400).json({ error: 'Valid Email/User ID is required.' });
+      return res.status(400).json({ success: false, error: 'Valid Email/User ID is required.' });
     }
     if (!password || password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+      return res.status(400).json({ success: false, error: 'Password must be at least 6 characters.' });
     }
     if (!['ADMIN', 'EMPLOYEE', 'SELLER'].includes(role)) {
-      return res.status(400).json({ error: 'Invalid role specified. Must be ADMIN, EMPLOYEE, or SELLER.' });
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid role specified. Must be ADMIN, EMPLOYEE, or SELLER.',
+      });
     }
 
-    const created = createUser({
+    const created = await createUserAsync({
       displayName,
       email,
       password,
@@ -199,17 +217,17 @@ app.post('/api/users', authenticateToken, requireAdmin, (req, res) => {
 
     return res.status(201).json({ success: true, user: created });
   } catch (err: any) {
-    return res.status(400).json({ error: err.message || 'Failed to create user.' });
+    return res.status(400).json({ success: false, error: err.message || 'Failed to create user.' });
   }
 });
 
 // 3. Update User (Admin only)
-app.put('/api/users/:id', authenticateToken, requireAdmin, (req, res) => {
+app.put('/api/users/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { displayName, mobileNumber, role, status, sellerId } = req.body;
 
-    const updated = updateUser(id, {
+    const updated = await updateUserAsync(id, {
       displayName,
       mobileNumber,
       role,
@@ -219,35 +237,35 @@ app.put('/api/users/:id', authenticateToken, requireAdmin, (req, res) => {
 
     return res.json({ success: true, user: updated });
   } catch (err: any) {
-    return res.status(400).json({ error: err.message || 'Failed to update user.' });
+    return res.status(400).json({ success: false, error: err.message || 'Failed to update user.' });
   }
 });
 
 // 4. Reset User Password (Admin only)
-app.post('/api/users/:id/reset-password', authenticateToken, requireAdmin, (req, res) => {
+app.post('/api/users/:id/reset-password', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { newPassword } = req.body;
 
     if (!newPassword || newPassword.length < 6) {
-      return res.status(400).json({ error: 'New password must be at least 6 characters.' });
+      return res.status(400).json({ success: false, error: 'New password must be at least 6 characters.' });
     }
 
-    resetUserPassword(id, newPassword);
+    await resetUserPasswordAsync(id, newPassword);
     return res.json({ success: true, message: 'Password reset successfully.' });
   } catch (err: any) {
-    return res.status(400).json({ error: err.message || 'Failed to reset password.' });
+    return res.status(400).json({ success: false, error: err.message || 'Failed to reset password.' });
   }
 });
 
 // 5. Delete User (Admin only)
-app.delete('/api/users/:id', authenticateToken, requireAdmin, (req, res) => {
+app.delete('/api/users/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    deleteUser(id);
+    await deleteUserAsync(id);
     return res.json({ success: true, message: 'User deleted successfully.' });
   } catch (err: any) {
-    return res.status(400).json({ error: err.message || 'Failed to delete user.' });
+    return res.status(400).json({ success: false, error: err.message || 'Failed to delete user.' });
   }
 });
 
@@ -271,7 +289,7 @@ app.post('/api/ai/generate-product', async (req, res) => {
   try {
     const { prompt, category, targetMarket } = req.body;
     if (!prompt || typeof prompt !== 'string') {
-      return res.status(400).json({ error: 'Prompt string is required.' });
+      return res.status(400).json({ success: false, error: 'Prompt string is required.' });
     }
 
     const ai = getGeminiClient();
@@ -336,6 +354,7 @@ Generate:
   } catch (error: any) {
     console.error('Gemini API generation error:', error);
     return res.status(500).json({
+      success: false,
       error: error.message || 'Failed to generate product copy using Gemini AI.',
     });
   }
@@ -345,13 +364,33 @@ Generate:
 // Health Check Endpoint
 // ----------------------------------------------------
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', serverTime: new Date().toISOString() });
+  res.json({ status: 'ok', success: true, serverTime: new Date().toISOString() });
+});
+
+// Catch-all for undefined /api/* routes to prevent returning HTML
+app.all('/api/*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    error: `API endpoint ${req.method} ${req.path} was not found.`,
+  });
+});
+
+// Global JSON Error Handler Middleware
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  console.error('[Unhandled API Error]:', err);
+  if (res.headersSent) {
+    return next(err);
+  }
+  return res.status(err.status || 500).json({
+    success: false,
+    error: err.message || 'Internal Server Error',
+  });
 });
 
 // ----------------------------------------------------
-// Vite Middleware / Static Asset Ingestion
+// Vite Middleware / Static Asset Ingestion (SPA)
 // ----------------------------------------------------
-async function startServer() {
+export async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -371,4 +410,10 @@ async function startServer() {
   });
 }
 
-startServer();
+// Start standalone dev server when not invoked as Vercel serverless function
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export { app };
+export default app;

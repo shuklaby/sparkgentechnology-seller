@@ -3,13 +3,18 @@
     "User": {
       "collection": "users",
       "fields": {
-        "uid": { "type": "string", "description": "Firebase Auth UID" },
-        "phoneNumber": { "type": "string", "description": "Authenticated phone number with country code" },
-        "role": { "type": "string", "description": "User role: ADMIN or SELLER" },
-        "sellerId": { "type": "string", "description": "Optional seller ID linked to profile" },
-        "displayName": { "type": "string", "description": "User display title" },
+        "uid": { "type": "string", "description": "Unique user ID" },
+        "email": { "type": "string", "description": "Normalized email address / user ID" },
+        "displayName": { "type": "string", "description": "User display title or full name" },
+        "role": { "type": "string", "description": "User role: ADMIN, SELLER, or EMPLOYEE" },
+        "status": { "type": "string", "description": "Account status: ACTIVE or INACTIVE" },
+        "mobileNumber": { "type": "string", "description": "Optional mobile phone number" },
+        "sellerId": { "type": "string", "description": "Optional linked seller tenant ID" },
+        "passwordHash": { "type": "string", "description": "Secure scrypt password hash" },
+        "salt": { "type": "string", "description": "Cryptographic salt" },
         "createdAt": { "type": "number", "description": "Timestamp in milliseconds" },
-        "lastLoginAt": { "type": "number", "description": "Timestamp in milliseconds" }
+        "lastLoginAt": { "type": "number", "description": "Timestamp in milliseconds" },
+        "updatedAt": { "type": "number", "description": "Timestamp in milliseconds" }
       }
     },
     "Seller": {

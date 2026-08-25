@@ -3,7 +3,7 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import fileConfig from '../../firebase-applet-config.json';
 
-// Read runtime environment variables if provided (e.g. on Vercel deployment)
+// Read runtime environment variables if provided
 const env: Record<string, string | undefined> =
   typeof import.meta !== 'undefined' && (import.meta as any).env
     ? (import.meta as any).env
@@ -30,19 +30,8 @@ export const isFirebaseConfigured = Boolean(
 // Initialize Firebase App
 const app = !getApps().length ? initializeApp(activeFirebaseConfig) : getApp();
 
-// Log Firebase runtime initialization status for diagnostics
-if (typeof window !== 'undefined') {
-  console.log('[Firebase Runtime Init]', {
-    projectId: app.options.projectId,
-    authDomain: app.options.authDomain,
-    appId: app.options.appId,
-    messagingSenderId: app.options.messagingSenderId,
-    apiKeyConfigured: Boolean(app.options.apiKey),
-    apiKeyPrefix: app.options.apiKey ? `${String(app.options.apiKey).substring(0, 8)}...` : 'None',
-  });
-}
-
 export const auth = getAuth(app);
+
 export const db =
   activeFirebaseConfig.firestoreDatabaseId &&
   activeFirebaseConfig.firestoreDatabaseId !== '(default)' &&

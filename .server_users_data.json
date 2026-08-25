@@ -1,0 +1,39 @@
+[
+  {
+    "uid": "spark-admin-root",
+    "email": "admin@sparkgentech.com",
+    "displayName": "Spark Gen Administrator",
+    "role": "ADMIN",
+    "status": "ACTIVE",
+    "passwordHash": "71c3a68b5fb052eef63c1e94033f46062c4b65c9fd49696b508a7de48ed11cb70dff9bba977ba756769f12ebe5a57cbca09811191c628f5d97c29ee40eed49ab",
+    "salt": "11ab31c9ebd577adb2b6c6a91936ec36",
+    "createdAt": 1785091178170,
+    "lastLoginAt": 1787683183439
+  },
+  {
+    "uid": "spark-seller-demo",
+    "email": "seller@sparkgentech.com",
+    "displayName": "ABC Enterprises (Seller)",
+    "role": "SELLER",
+    "status": "ACTIVE",
+    "sellerId": "demo-abc-enterprises",
+    "mobileNumber": "+91 98765 43210",
+    "passwordHash": "ebf115f13c7cc2b492fb27f9ea3cf92748e4b99894a035ac002c822ecd7a65fa1c6c4c49a2cde9e67dc3930bbf37b685607a09c80ebec7f3496330e6f1265f88",
+    "salt": "7af85358bb87a8c65ac25d17919715a7",
+    "createdAt": 1785955178225,
+    "lastLoginAt": 1787683178225
+  },
+  {
+    "uid": "spark-seller-abc",
+    "email": "abc.seller@sparkgentech.com",
+    "displayName": "ABC Industrial Supplies",
+    "role": "SELLER",
+    "status": "ACTIVE",
+    "sellerId": "demo-abc-enterprises",
+    "mobileNumber": "+91 98765 43210",
+    "passwordHash": "27261efd278a96d5fbc7cc0f750f9a92dcd8667b2c0abaa0ddc9fcbbe5dd1958bb199f0dec0575308a08f84c1763310d90d8f360c26a05f13161242c70fcad53",
+    "salt": "967592da80b6740e86d2b3de2b910252",
+    "createdAt": 1786387178268,
+    "lastLoginAt": 1787683183508
+  }
+]
