@@ -17,22 +17,29 @@ import {
   Lock,
   RefreshCw,
   Sparkles,
-  ArrowUpRight
+  ArrowUpRight,
+  UserCheck,
+  Layers
 } from 'lucide-react';
-import { SellerProfile, AdminStats } from '../types';
+import { SellerProfile, AdminStats, AppUser } from '../types';
 import { getAllSellers, getAdminStatistics, saveSellerProfile } from '../lib/dbService';
+import { UserManagement } from './UserManagement';
+import { SparkGenLogo } from './SparkGenLogo';
 
 interface AdminDashboardProps {
+  currentUser: AppUser;
   onViewSellerWebsite: (slug: string) => void;
   onViewSellerCatalog: (sellerId: string) => void;
   onLogout: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
+  currentUser,
   onViewSellerWebsite,
   onViewSellerCatalog,
   onLogout,
 }) => {
+  const [activeAdminTab, setActiveAdminTab] = useState<'sellers' | 'users'>('sellers');
   const [sellers, setSellers] = useState<SellerProfile[]>([]);
   const [stats, setStats] = useState<AdminStats>({
     totalSellers: 0,
@@ -121,21 +128,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       <header className="bg-white border-b border-slate-200 px-6 py-3.5 sticky top-0 z-30 shadow-xs">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center text-white">
-              <ShieldCheck className="w-4 h-4" />
-            </div>
-            <div>
+            <SparkGenLogo className="h-8 w-auto max-w-[180px]" alt="Spark Gen Technology" />
+            <div className="hidden md:block pl-3 border-l border-slate-200">
               <div className="flex items-center gap-2">
-                <h1 className="font-bold text-sm text-slate-900 tracking-tight">Catalogo Master Console</h1>
-                <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-600 text-[10px] font-mono font-bold">
-                  ADMIN: 7897752217
+                <span className="font-bold text-xs text-slate-900 tracking-tight">Master Console</span>
+                <span className="px-2 py-0.5 rounded bg-purple-50 border border-purple-200 text-purple-700 text-[10px] font-mono font-bold">
+                  {currentUser.email}
+                </span>
+                <span className="px-1.5 py-0.2 rounded bg-slate-900 text-white text-[9px] font-bold uppercase">
+                  ADMIN
                 </span>
               </div>
-              <p className="text-xs text-slate-500">Multi-tenant seller control & verification hub</p>
+              <p className="text-[11px] text-slate-500">Enterprise Administration &amp; Tenant Moderation</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2.5">
+            {/* View Selector Tabs */}
+            <div className="hidden sm:flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
+              <button
+                onClick={() => setActiveAdminTab('sellers')}
+                className={`px-3 py-1 rounded-md font-medium flex items-center gap-1.5 transition ${
+                  activeAdminTab === 'sellers'
+                    ? 'bg-white text-slate-900 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                Sellers &amp; Catalogs
+              </button>
+              <button
+                onClick={() => setActiveAdminTab('users')}
+                className={`px-3 py-1 rounded-md font-medium flex items-center gap-1.5 transition ${
+                  activeAdminTab === 'users'
+                    ? 'bg-white text-blue-600 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                User Management
+              </button>
+            </div>
+
             <button
               onClick={loadData}
               className="p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-slate-900 transition"
@@ -152,208 +186,234 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Mobile Tab switcher */}
+        <div className="sm:hidden flex items-center gap-2 mt-3 pt-2 border-t border-slate-100">
+          <button
+            onClick={() => setActiveAdminTab('sellers')}
+            className={`flex-1 py-1.5 rounded-lg text-xs font-medium text-center ${
+              activeAdminTab === 'sellers' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'
+            }`}
+          >
+            Sellers &amp; Catalogs
+          </button>
+          <button
+            onClick={() => setActiveAdminTab('users')}
+            className={`flex-1 py-1.5 rounded-lg text-xs font-medium text-center ${
+              activeAdminTab === 'users' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'
+            }`}
+          >
+            User Management
+          </button>
+        </div>
       </header>
 
       {/* Main Admin Dashboard Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full flex-1 space-y-6">
-        {/* KPI Stats Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Sellers</span>
-            <div className="text-2xl font-bold text-slate-900 mt-1">{stats.totalSellers}</div>
-            <span className="text-xs text-slate-500">Tenants registered</span>
-          </div>
-
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Active Sellers</span>
-            <div className="text-2xl font-bold text-emerald-600 mt-1">{stats.activeSellers}</div>
-            <span className="text-xs text-emerald-600 font-medium">Live accounts</span>
-          </div>
-
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Inactive Sellers</span>
-            <div className="text-2xl font-bold text-slate-400 mt-1">{stats.inactiveSellers}</div>
-            <span className="text-xs text-slate-400">Suspended / Draft</span>
-          </div>
-
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Catalog Items</span>
-            <div className="text-2xl font-bold text-slate-900 mt-1">{stats.totalProducts}</div>
-            <span className="text-xs text-blue-600 font-medium">B2B products</span>
-          </div>
-
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Published Sites</span>
-            <div className="text-2xl font-bold text-blue-600 mt-1">{stats.publishedWebsites}</div>
-            <span className="text-xs text-slate-500">Public websites</span>
-          </div>
-
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Custom Domains</span>
-            <div className="text-2xl font-bold text-slate-900 mt-1">{stats.customDomainsConnected}</div>
-            <span className="text-xs text-slate-500">Mapped domains</span>
-          </div>
-        </div>
-
-        {/* Sellers Management Card */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden space-y-4 p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-base font-bold text-slate-900">Seller Organizations & Websites</h2>
-              <p className="text-xs text-slate-500">
-                Oversee tenant company profiles, account activation, custom domain routing & catalogs.
-              </p>
-            </div>
-
-            {/* Filter & Search Bar */}
-            <div className="flex items-center gap-2.5">
-              <div className="relative w-64">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search company, slug, phone..."
-                  className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500"
-                />
+        {activeAdminTab === 'users' ? (
+          <UserManagement currentUser={currentUser} />
+        ) : (
+          <>
+            {/* KPI Stats Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Sellers</span>
+                <div className="text-2xl font-bold text-slate-900 mt-1">{stats.totalSellers}</div>
+                <span className="text-xs text-slate-500">Tenants registered</span>
               </div>
 
-              <select
-                value={statusFilter}
-                onChange={(e: any) => setStatusFilter(e.target.value)}
-                className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:border-blue-500"
-              >
-                <option value="ALL">All Status</option>
-                <option value="ACTIVE">Active Only</option>
-                <option value="INACTIVE">Inactive Only</option>
-              </select>
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Active Sellers</span>
+                <div className="text-2xl font-bold text-emerald-600 mt-1">{stats.activeSellers}</div>
+                <span className="text-xs text-emerald-600 font-medium">Live accounts</span>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Inactive Sellers</span>
+                <div className="text-2xl font-bold text-slate-400 mt-1">{stats.inactiveSellers}</div>
+                <span className="text-xs text-slate-400">Suspended / Draft</span>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Catalog Items</span>
+                <div className="text-2xl font-bold text-slate-900 mt-1">{stats.totalProducts}</div>
+                <span className="text-xs text-blue-600 font-medium">B2B products</span>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Published Sites</span>
+                <div className="text-2xl font-bold text-blue-600 mt-1">{stats.publishedWebsites}</div>
+                <span className="text-xs text-slate-500">Public websites</span>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Custom Domains</span>
+                <div className="text-2xl font-bold text-slate-900 mt-1">{stats.customDomainsConnected}</div>
+                <span className="text-xs text-slate-500">Mapped domains</span>
+              </div>
             </div>
-          </div>
 
-          {/* Sellers Data Table */}
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-50/75 border-b border-slate-200 text-slate-500 font-semibold uppercase text-[10px] tracking-wider">
-                  <th className="py-3 px-4">Company & Slug</th>
-                  <th className="py-3 px-4">Contact Info</th>
-                  <th className="py-3 px-4">Category & Plan</th>
-                  <th className="py-3 px-4">Domain Status</th>
-                  <th className="py-3 px-4">Website</th>
-                  <th className="py-3 px-4">Account Status</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredSellers.map((seller) => (
-                  <tr key={seller.id} className="hover:bg-slate-50/80 transition">
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-3">
-                        <img
-                          src={seller.logoUrl || 'https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?w=100'}
-                          alt={seller.companyName}
-                          className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0"
-                        />
-                        <div>
-                          <span className="font-bold text-slate-900 block text-xs">{seller.companyName}</span>
-                          <span className="font-mono text-[11px] text-blue-600">/site/{seller.slug}</span>
-                        </div>
-                      </div>
-                    </td>
+            {/* Sellers Management Card */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden space-y-4 p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">Seller Organizations &amp; Websites</h2>
+                  <p className="text-xs text-slate-500">
+                    Oversee tenant company profiles, account activation, custom domain routing &amp; catalogs.
+                  </p>
+                </div>
 
-                    <td className="py-3.5 px-4 text-slate-600">
-                      <div>{seller.mobileNumber}</div>
-                      <div className="text-[11px] text-slate-400">{seller.email}</div>
-                    </td>
+                {/* Filter & Search Bar */}
+                <div className="flex items-center gap-2.5">
+                  <div className="relative w-64">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search company, slug, phone..."
+                      className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
 
-                    <td className="py-3.5 px-4">
-                      <span className="font-medium text-slate-800 block">{seller.businessType}</span>
-                      <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-bold">
-                        {seller.subscriptionPlan || 'Starter'}
-                      </span>
-                    </td>
+                  <select
+                    value={statusFilter}
+                    onChange={(e: any) => setStatusFilter(e.target.value)}
+                    className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="ALL">All Status</option>
+                    <option value="ACTIVE">Active Only</option>
+                    <option value="INACTIVE">Inactive Only</option>
+                  </select>
+                </div>
+              </div>
 
-                    <td className="py-3.5 px-4">
-                      {seller.customDomain ? (
-                        <div>
-                          <span className="font-mono text-[11px] text-slate-800 block">{seller.customDomain}</span>
-                          <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 font-semibold">
-                            ● Active CNAME
+              {/* Sellers Data Table */}
+              <div className="overflow-x-auto rounded-lg border border-slate-200">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/75 border-b border-slate-200 text-slate-500 font-semibold uppercase text-[10px] tracking-wider">
+                      <th className="py-3 px-4">Company &amp; Slug</th>
+                      <th className="py-3 px-4">Contact Info</th>
+                      <th className="py-3 px-4">Category &amp; Plan</th>
+                      <th className="py-3 px-4">Domain Status</th>
+                      <th className="py-3 px-4">Website</th>
+                      <th className="py-3 px-4">Account Status</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredSellers.map((seller) => (
+                      <tr key={seller.id} className="hover:bg-slate-50/80 transition">
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={seller.logoUrl || 'https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?w=100'}
+                              alt={seller.companyName}
+                              className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0"
+                            />
+                            <div>
+                              <span className="font-bold text-slate-900 block text-xs">{seller.companyName}</span>
+                              <span className="font-mono text-[11px] text-blue-600">/site/{seller.slug}</span>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-slate-600">
+                          <div>{seller.mobileNumber}</div>
+                          <div className="text-[11px] text-slate-400">{seller.email}</div>
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <span className="font-medium text-slate-800 block">{seller.businessType}</span>
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-bold">
+                            {seller.subscriptionPlan || 'Starter'}
                           </span>
-                        </div>
-                      ) : (
-                        <span className="text-slate-400 text-[11px]">Subpath Only</span>
-                      )}
-                    </td>
+                        </td>
 
-                    <td className="py-3.5 px-4">
-                      <button
-                        onClick={() => handleTogglePublish(seller)}
-                        className={`inline-flex items-center text-xs hover:underline cursor-pointer`}
-                      >
-                        <span
-                          className={`w-2 h-2 rounded-full inline-block mr-1.5 ${
-                            seller.isPublished ? 'bg-emerald-500' : 'bg-slate-400'
-                          }`}
-                        />
-                        <span className={seller.isPublished ? 'text-slate-800 font-medium' : 'text-slate-500'}>
-                          {seller.isPublished ? 'Published' : 'Draft'}
-                        </span>
-                      </button>
-                    </td>
+                        <td className="py-3.5 px-4">
+                          {seller.customDomain ? (
+                            <div>
+                              <span className="font-mono text-[11px] text-slate-800 block">{seller.customDomain}</span>
+                              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 font-semibold">
+                                ● Active CNAME
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-[11px]">Subpath Only</span>
+                          )}
+                        </td>
 
-                    <td className="py-3.5 px-4">
-                      <button
-                        onClick={() => handleToggleStatus(seller)}
-                        className={`px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1 transition ${
-                          seller.isActive
-                            ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                            : 'bg-red-50 text-red-700 hover:bg-red-100'
-                        }`}
-                      >
-                        {seller.isActive ? (
-                          <>
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Active
-                          </>
-                        ) : (
-                          <>
-                            <XCircle className="w-3.5 h-3.5 text-red-600" /> Deactivated
-                          </>
-                        )}
-                      </button>
-                    </td>
+                        <td className="py-3.5 px-4">
+                          <button
+                            onClick={() => handleTogglePublish(seller)}
+                            className={`inline-flex items-center text-xs hover:underline cursor-pointer`}
+                          >
+                            <span
+                              className={`w-2 h-2 rounded-full inline-block mr-1.5 ${
+                                seller.isPublished ? 'bg-emerald-500' : 'bg-slate-400'
+                              }`}
+                            />
+                            <span className={seller.isPublished ? 'text-slate-800 font-medium' : 'text-slate-500'}>
+                              {seller.isPublished ? 'Published' : 'Draft'}
+                            </span>
+                          </button>
+                        </td>
 
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => onViewSellerCatalog(seller.id)}
-                          className="px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition"
-                          title="View Catalog"
-                        >
-                          Catalog
-                        </button>
-                        <button
-                          onClick={() => onViewSellerWebsite(seller.slug)}
-                          className="px-2.5 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium flex items-center gap-1 transition"
-                          title="View Public Site"
-                        >
-                          <Eye className="w-3 h-3" /> Site
-                        </button>
-                        <button
-                          onClick={() => setEditingSeller({ ...seller })}
-                          className="p-1 rounded-md hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition"
-                          title="Edit Seller Basics"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                        <td className="py-3.5 px-4">
+                          <button
+                            onClick={() => handleToggleStatus(seller)}
+                            className={`px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1 transition ${
+                              seller.isActive
+                                ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                : 'bg-red-50 text-red-700 hover:bg-red-100'
+                            }`}
+                          >
+                            {seller.isActive ? (
+                              <>
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Active
+                              </>
+                            ) : (
+                              <>
+                                <XCircle className="w-3.5 h-3.5 text-red-600" /> Deactivated
+                              </>
+                            )}
+                          </button>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => onViewSellerCatalog(seller.id)}
+                              className="px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition"
+                              title="View Catalog"
+                            >
+                              Catalog
+                            </button>
+                            <button
+                              onClick={() => onViewSellerWebsite(seller.slug)}
+                              className="px-2.5 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium flex items-center gap-1 transition"
+                              title="View Public Site"
+                            >
+                              <Eye className="w-3 h-3" /> Site
+                            </button>
+                            <button
+                              onClick={() => setEditingSeller({ ...seller })}
+                              className="p-1 rounded-md hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition"
+                              title="Edit Seller Basics"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
       </main>
 
       {/* Seller Edit Modal */}

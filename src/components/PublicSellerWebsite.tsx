@@ -29,6 +29,7 @@ import {
   SocialLinksSettings,
   SeoSettings
 } from '../types';
+import { SparkGenLogo } from './SparkGenLogo';
 
 interface PublicSellerWebsiteProps {
   seller: SellerProfile;
@@ -656,8 +657,11 @@ export const PublicSellerWebsite: React.FC<PublicSellerWebsiteProps> = ({
 
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
               <p>© {new Date().getFullYear()} {seller.companyName}. All rights reserved.</p>
-              <div className="flex items-center gap-4">
-                <span>Powered by Catalogo B2B SaaS</span>
+              <div className="flex items-center gap-2.5">
+                <span className="text-[11px] text-slate-400">Powered by</span>
+                <div className="bg-white/90 px-2 py-0.5 rounded">
+                  <SparkGenLogo className="h-4 w-auto" alt="Spark Gen Technology" />
+                </div>
                 <span>•</span>
                 <span className="font-mono">/site/{seller.slug}</span>
               </div>

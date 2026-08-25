@@ -1,14 +1,18 @@
-export type UserRole = 'ADMIN' | 'SELLER';
+export type UserRole = 'ADMIN' | 'EMPLOYEE' | 'SELLER';
+export type UserStatus = 'ACTIVE' | 'INACTIVE';
 
 export interface AppUser {
   uid: string;
-  phoneNumber: string;
-  email?: string;
-  displayName?: string;
+  email: string;
+  displayName: string;
   role: UserRole;
+  status: UserStatus;
+  mobileNumber?: string; // Optional, NOT used for authentication
   sellerId?: string; // If role is SELLER, matches the seller document ID
+  assignedPermissions?: string[];
   createdAt: number;
   lastLoginAt: number;
+  updatedAt?: number;
 }
 
 export interface SellerProfile {

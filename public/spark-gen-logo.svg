@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 240" fill="none" width="100%" height="100%">
+  <!-- Circular Swoosh Rings -->
+  <g transform="translate(10, 10)">
+    <!-- Outer Orange Crescent -->
+    <path
+      d="M 95 25 C 50 45 20 90 22 142 C 24 185 55 220 100 230 C 65 220 38 185 36 142 C 34 98 62 55 95 25 Z"
+      fill="#F15A24"
+    />
+    <!-- Middle Royal Blue Main Crescent -->
+    <path
+      d="M 125 15 C 65 25 25 78 28 140 C 31 195 72 235 125 240 C 80 230 45 185 45 138 C 45 82 82 35 125 15 Z"
+      fill="#0052CC"
+    />
+    <!-- Inner Orange Accent Arc (top-right curve to bottom-right) -->
+    <path
+      d="M 95 32 C 120 36 140 50 152 70 C 138 55 118 42 95 32 Z"
+      fill="#F15A24"
+    />
+    <path
+      d="M 148 185 C 132 205 110 220 85 228 C 108 220 128 205 142 185 Z"
+      fill="#F15A24"
+    />
+  </g>
+
+  <!-- Typography: SPARK GEN TECHNOLOGY -->
+  <!-- Top: SPARK GEN in Royal Blue -->
+  <text
+    x="180"
+    y="125"
+    font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+    font-size="64"
+    font-weight="900"
+    letter-spacing="2.5"
+    fill="#0052CC"
+  >SPARK GEN</text>
+
+  <!-- Bottom: TECHNOLOGY in Vibrant Orange -->
+  <text
+    x="184"
+    y="168"
+    font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+    font-size="25"
+    font-weight="800"
+    letter-spacing="13.5"
+    fill="#F15A24"
+  >TECHNOLOGY</text>
+</svg>

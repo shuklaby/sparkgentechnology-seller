@@ -45,6 +45,7 @@ import {
   DomainStatus,
   WebsiteTemplateType
 } from '../types';
+import { SparkGenLogo } from './SparkGenLogo';
 import {
   saveSellerProfile,
   getProducts,
@@ -327,16 +328,19 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
       {/* 1. Left Sidebar Navigation */}
       <aside className="w-full md:w-64 bg-[#0F172A] text-white flex flex-col shrink-0 border-r border-slate-800">
         {/* Brand Header */}
-        <div className="p-6 flex items-center justify-between border-b border-slate-800/80">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-white text-base shadow-sm">
+        <div className="p-4 flex flex-col gap-3 border-b border-slate-800/80">
+          <div className="bg-white/95 px-3 py-2 rounded-xl flex items-center justify-center">
+            <SparkGenLogo className="h-7 w-auto max-w-[170px]" alt="Spark Gen Technology" />
+          </div>
+          <div className="flex items-center gap-2.5 pt-1 px-1">
+            <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-white text-xs shadow-xs shrink-0">
               {seller.companyName ? seller.companyName.charAt(0).toUpperCase() : 'S'}
             </div>
-            <div>
-              <h2 className="font-semibold text-base text-white tracking-tight leading-tight truncate max-w-[140px]">
+            <div className="min-w-0 flex-1">
+              <h2 className="font-semibold text-xs text-white tracking-tight leading-tight truncate">
                 {seller.companyName}
               </h2>
-              <span className="text-[11px] text-slate-400">SellerPort</span>
+              <span className="text-[10px] text-slate-400">Seller Organization</span>
             </div>
           </div>
         </div>

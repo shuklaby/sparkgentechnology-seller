@@ -36,7 +36,7 @@ import {
 // Local storage fallback cache to ensure seamless zero-lag execution even before Firestore rules propagation
 const LOCAL_STORAGE_KEY_PREFIX = 'b2b_saas_';
 
-function getLocal<T>(key: string, fallback: T): T {
+export function getLocal<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + key);
     if (!raw) return fallback;
@@ -46,11 +46,23 @@ function getLocal<T>(key: string, fallback: T): T {
   }
 }
 
-function setLocal(key: string, val: unknown): void {
+export function setLocal(key: string, val: unknown): void {
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY_PREFIX + key, JSON.stringify(val));
   } catch (e) {
     console.warn('LocalStorage error:', e);
+  }
+}
+
+export function saveActiveSessionUser(user: AppUser): void {
+  setLocal('active_session_user', user);
+}
+
+export function clearActiveSessionUser(): void {
+  try {
+    localStorage.removeItem(LOCAL_STORAGE_KEY_PREFIX + 'active_session_user');
+  } catch (e) {
+    console.warn('LocalStorage clear error:', e);
   }
 }
 
@@ -103,7 +115,7 @@ export async function initializeDemoDataIfMissing(): Promise<void> {
 }
 
 // ----------------------------------------------------
-// 2. Authentication & User Role Validation (Real Firebase Auth)
+// 2. User Record Operations
 // ----------------------------------------------------
 export async function getUserRecord(uid: string): Promise<AppUser | null> {
   try {
@@ -116,108 +128,6 @@ export async function getUserRecord(uid: string): Promise<AppUser | null> {
     console.error('Error loading user record from Firestore:', err);
   }
   return null;
-}
-
-export async function syncAuthenticatedUser(
-  firebaseUser: { uid: string; phoneNumber?: string | null; email?: string | null; displayName?: string | null },
-  targetRole?: 'ADMIN' | 'SELLER'
-): Promise<{ user: AppUser; seller?: SellerProfile }> {
-  const { uid, phoneNumber } = firebaseUser;
-  const userDocRef = doc(db, 'users', uid);
-  const snap = await getDoc(userDocRef);
-
-  const cleanPhone = (phoneNumber || '').replace(/\D/g, '');
-  const isAdminPhone = cleanPhone.includes(ADMIN_PHONE_NUMBER) || cleanPhone === ADMIN_PHONE_NUMBER;
-
-  if (snap.exists()) {
-    const existingUser = snap.data() as AppUser;
-
-    // Strict role check for Admin portal
-    if (targetRole === 'ADMIN' && existingUser.role !== 'ADMIN') {
-      throw new Error(
-        'Access Denied: Your authenticated account does not have administrator privileges in Firestore.'
-      );
-    }
-
-    const updatedUser: AppUser = {
-      ...existingUser,
-      phoneNumber: phoneNumber || existingUser.phoneNumber,
-      lastLoginAt: Date.now(),
-    };
-
-    await setDoc(userDocRef, updatedUser, { merge: true });
-
-    let sellerProfile: SellerProfile | undefined;
-    if (existingUser.role === 'SELLER' && existingUser.sellerId) {
-      sellerProfile = (await getSellerById(existingUser.sellerId)) || undefined;
-    }
-
-    return { user: updatedUser, seller: sellerProfile };
-  }
-
-  // User does not exist yet in Firestore — verify role and provision profile
-  if (targetRole === 'ADMIN') {
-    if (!isAdminPhone) {
-      throw new Error(
-        `Access Denied: Phone number ${phoneNumber || 'provided'} is not authorized as an Administrator.`
-      );
-    }
-
-    const newAdminUser: AppUser = {
-      uid,
-      phoneNumber: phoneNumber || `+91 ${ADMIN_PHONE_NUMBER}`,
-      displayName: 'Platform Administrator',
-      role: 'ADMIN',
-      createdAt: Date.now(),
-      lastLoginAt: Date.now(),
-    };
-
-    await setDoc(userDocRef, newAdminUser);
-    return { user: newAdminUser };
-  }
-
-  // Provision new Seller User & Profile
-  const sellerId = `seller-${uid.slice(0, 12).toLowerCase()}`;
-  const newSellerUser: AppUser = {
-    uid,
-    phoneNumber: phoneNumber || '',
-    displayName: firebaseUser.displayName || 'Enterprise Seller',
-    role: 'SELLER',
-    sellerId,
-    createdAt: Date.now(),
-    lastLoginAt: Date.now(),
-  };
-
-  await setDoc(userDocRef, newSellerUser);
-
-  const newSlug = `company-${uid.slice(0, 6).toLowerCase()}`;
-  const newSellerProfile: SellerProfile = {
-    id: sellerId,
-    companyName: 'My Enterprise',
-    slug: newSlug,
-    logoUrl: 'https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?w=300&auto=format&fit=crop&q=80',
-    businessDescription: 'Wholesale B2B supplier and manufacturer.',
-    mobileNumber: phoneNumber || '+91 98765 43210',
-    whatsappNumber: phoneNumber || '+91 98765 43210',
-    email: `contact@${newSlug}.com`,
-    address: 'Industrial Area Phase 1',
-    city: 'Mumbai',
-    state: 'Maharashtra',
-    country: 'India',
-    pincode: '400001',
-    googleMapsUrl: '',
-    businessType: 'Manufacturer',
-    yearEstablished: new Date().getFullYear(),
-    isActive: true,
-    isPublished: true,
-    ownerUid: uid,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    subscriptionPlan: 'Starter',
-  };
-
-  await saveSellerProfile(newSellerProfile);
-  return { user: newSellerUser, seller: newSellerProfile };
 }
 
 

@@ -1,12 +1,11 @@
 {
-  "projectId": "trusty-avatar-zlcf1",
-  "appId": "1:112416076140:web:d8d0ff493ae36e9a3d0349",
+  "projectId": "spark-gen-technology",
+  "appId": "1:1068481200061:web:468b6712839ff721155cd4",
   "apiKey": "AIzaSyCTJgYHQib1sqeOIFO4T8lmCActQBgjpOY",
-  "authDomain": "trusty-avatar-zlcf1.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-b2bsellercatalog-6012c4ff-e6c5-44f9-980c-764acae9d0e0",
-  "storageBucket": "trusty-avatar-zlcf1.firebasestorage.app",
-  "messagingSenderId": "112416076140",
+  "authDomain": "spark-gen-technology.firebaseapp.com",
+  "firestoreDatabaseId": "",
+  "storageBucket": "spark-gen-technology.firebasestorage.app",
+  "messagingSenderId": "1068481200061",
   "measurementId": "",
-  "oAuthClientId": "112416076140-ruiljat0egurcmvpq1b72ihdikecko18.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }

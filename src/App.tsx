@@ -9,8 +9,6 @@ import {
   ExternalLink,
   Loader2
 } from 'lucide-react';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { auth } from './lib/firebase';
 import { AppUser, SellerProfile, Product, Category, WebsiteDesignSettings, SocialLinksSettings, SeoSettings } from './types';
 import {
   initializeDemoDataIfMissing,
@@ -21,12 +19,16 @@ import {
   getCategories,
   getWebsiteDesignSettings,
   getSocialLinks,
-  getSeoSettings
+  getSeoSettings,
+  getLocal,
+  clearActiveSessionUser
 } from './lib/dbService';
+import { verifyCurrentSession, logoutUser } from './lib/authService';
 import { AuthModal } from './components/AuthModal';
 import { AdminDashboard } from './components/AdminDashboard';
 import { SellerDashboard } from './components/SellerDashboard';
 import { PublicSellerWebsite } from './components/PublicSellerWebsite';
+import { SparkGenLogo } from './components/SparkGenLogo';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
@@ -46,33 +48,44 @@ export default function App() {
   const [publicSeo, setPublicSeo] = useState<SeoSettings | null>(null);
   const [isPublicLoading, setIsPublicLoading] = useState(false);
 
-  // 1. Firebase Auth State Listener (Real Session Management)
+  // 1. Session Initialization
   useEffect(() => {
     initializeDemoDataIfMissing();
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const checkSession = async () => {
       setIsAuthChecking(true);
-      if (firebaseUser) {
-        try {
-          const userDoc = await getUserRecord(firebaseUser.uid);
-          if (userDoc) {
-            setCurrentUser(userDoc);
-            if (userDoc.role === 'SELLER' && userDoc.sellerId) {
-              const sellerObj = await getSellerById(userDoc.sellerId);
+      try {
+        const sessionRes = await verifyCurrentSession();
+        if (sessionRes && sessionRes.user) {
+          setCurrentUser(sessionRes.user);
+          if (sessionRes.seller) {
+            setCurrentSeller(sessionRes.seller);
+          } else if (sessionRes.user.role === 'SELLER' && sessionRes.user.sellerId) {
+            const sellerObj = await getSellerById(sessionRes.user.sellerId);
+            if (sellerObj) setCurrentSeller(sellerObj);
+          }
+        } else {
+          // Fallback to local session storage cache if server response is not available
+          const cachedUser = getLocal<AppUser | null>('active_session_user', null);
+          if (cachedUser) {
+            setCurrentUser(cachedUser);
+            if (cachedUser.role === 'SELLER' && cachedUser.sellerId) {
+              const sellerObj = await getSellerById(cachedUser.sellerId);
               if (sellerObj) setCurrentSeller(sellerObj);
             }
+          } else {
+            setCurrentUser(null);
+            setCurrentSeller(null);
           }
-        } catch (err) {
-          console.error('Error fetching user profile upon auth state change:', err);
         }
-      } else {
-        setCurrentUser(null);
-        setCurrentSeller(null);
+      } catch (err) {
+        console.warn('Session verification fallback:', err);
+      } finally {
+        setIsAuthChecking(false);
       }
-      setIsAuthChecking(false);
-    });
+    };
 
-    return () => unsubscribe();
+    checkSession();
   }, []);
 
   // 2. Hash Route Navigation & Protection
@@ -92,7 +105,7 @@ export default function App() {
           setAuthModalOpen(true);
         }
       } else if (hash === '#/seller') {
-        if (currentUser?.role === 'SELLER' && currentSeller) {
+        if ((currentUser?.role === 'SELLER' || currentUser?.role === 'EMPLOYEE' || currentUser?.role === 'ADMIN') && currentSeller) {
           setCurrentView('SELLER');
         } else {
           setAuthModalRole('SELLER');
@@ -151,10 +164,11 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      await logoutUser();
     } catch (err) {
       console.warn('Sign out error:', err);
     }
+    clearActiveSessionUser();
     setCurrentUser(null);
     setCurrentSeller(null);
     setCurrentView('HOME');
@@ -179,6 +193,7 @@ export default function App() {
       {/* VIEW: ADMIN CONSOLE */}
       {currentView === 'ADMIN' && currentUser?.role === 'ADMIN' && (
         <AdminDashboard
+          currentUser={currentUser}
           onViewSellerWebsite={(slug) => {
             window.location.hash = `#/site/${slug}`;
             openPublicWebsite(slug);
@@ -228,15 +243,12 @@ export default function App() {
       {currentView === 'HOME' && (
         <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-sans">
           {/* Header */}
-          <header className="border-b border-slate-200 bg-white px-6 py-4 sticky top-0 z-30 shadow-xs">
+          <header className="border-b border-slate-200 bg-white px-6 py-3.5 sticky top-0 z-30 shadow-xs">
             <div className="max-w-7xl mx-auto flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center shadow-xs">
-                  <Building2 className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <h1 className="font-bold text-base text-slate-900 tracking-tight">Catalogo B2B Platform</h1>
-                  <p className="text-xs text-slate-500">Multi-Tenant Seller Catalog & Website Builder</p>
+                <SparkGenLogo className="h-9 w-auto max-w-[200px]" alt="Spark Gen Technology" />
+                <div className="hidden sm:block pl-3 border-l border-slate-200">
+                  <p className="text-[11px] font-medium text-slate-500">B2B Seller Portal &amp; Enterprise Website Builder</p>
                 </div>
               </div>
 
@@ -249,7 +261,7 @@ export default function App() {
                   }}
                   className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium shadow-xs transition"
                 >
-                  Seller Portal
+                  Seller Login
                 </button>
                 <button
                   id="header-admin-login-btn"
@@ -270,15 +282,15 @@ export default function App() {
             <div className="max-w-4xl w-full text-center space-y-8 my-10">
               <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-medium">
                 <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                Production-Ready Multi-Tenant Architecture
+                Multi-Tenant B2B Architecture &amp; Secure Role Authentication
               </div>
 
               <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-slate-900 leading-tight">
-                Empower B2B Sellers With Instant Catalogs & Websites
+                Empower B2B Sellers With Instant Catalogs &amp; Websites
               </h2>
 
               <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto leading-relaxed">
-                Complete multi-tenant SaaS with isolated seller databases, Firestore role security, Gemini AI product copy generator, live website template engine, custom domain routing, and SEO optimization.
+                Complete multi-tenant SaaS with isolated seller catalogs, role-based access management, AI product copywriting, live website template customizer, custom domain routing, and SEO optimization.
               </p>
 
               {/* Portal Entry Cards */}
@@ -291,7 +303,7 @@ export default function App() {
                     </div>
                     <h3 className="font-bold text-base text-slate-900">Seller Dashboard</h3>
                     <p className="text-xs text-slate-500 leading-relaxed">
-                      Manage company profile, product catalog, categories, visual website designer & SEO settings.
+                      Manage company profile, product catalog, categories, visual website designer &amp; SEO settings.
                     </p>
                   </div>
                   <button
@@ -334,7 +346,7 @@ export default function App() {
                     </div>
                     <h3 className="font-bold text-base text-slate-900">Admin Console</h3>
                     <p className="text-xs text-slate-500 leading-relaxed">
-                      Phone <span className="font-mono text-slate-900 font-bold">7897752217</span> authenticated master control for multi-tenant status & verification.
+                      Secure email &amp; password administrator console for system moderation and user management.
                     </p>
                   </div>
                   <button
@@ -353,8 +365,11 @@ export default function App() {
           </main>
 
           {/* Footer */}
-          <footer className="border-t border-slate-200 bg-white p-6 text-center text-xs text-slate-500">
-            <p>Production Multi-Tenant B2B Catalog & Website Builder SaaS Platform</p>
+          <footer className="border-t border-slate-200 bg-white py-6 px-6 text-center text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-4 max-w-7xl mx-auto w-full">
+            <div className="flex items-center gap-2">
+              <SparkGenLogo className="h-6 w-auto" alt="Spark Gen Technology" />
+            </div>
+            <p>© {new Date().getFullYear()} Spark Gen Technology. All rights reserved. Multi-Tenant B2B Platform.</p>
           </footer>
         </div>
       )}
