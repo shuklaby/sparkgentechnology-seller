@@ -24,7 +24,9 @@ import {
 import { SellerProfile, AdminStats, AppUser } from '../types';
 import { getAllSellers, getAdminStatistics, saveSellerProfile } from '../lib/dbService';
 import { UserManagement } from './UserManagement';
+import { SellerOrdersManager } from './SellerOrdersManager';
 import { SparkGenLogo } from './SparkGenLogo';
+import { ShoppingBag } from 'lucide-react';
 
 interface AdminDashboardProps {
   currentUser: AppUser;
@@ -39,7 +41,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onViewSellerCatalog,
   onLogout,
 }) => {
-  const [activeAdminTab, setActiveAdminTab] = useState<'sellers' | 'users'>('sellers');
+  const [activeAdminTab, setActiveAdminTab] = useState<'sellers' | 'orders' | 'users'>('sellers');
   const [sellers, setSellers] = useState<SellerProfile[]>([]);
   const [stats, setStats] = useState<AdminStats>({
     totalSellers: 0,
@@ -158,6 +160,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 Sellers &amp; Catalogs
               </button>
               <button
+                onClick={() => setActiveAdminTab('orders')}
+                className={`px-3 py-1 rounded-md font-medium flex items-center gap-1.5 transition ${
+                  activeAdminTab === 'orders'
+                    ? 'bg-white text-emerald-700 shadow-xs font-semibold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <ShoppingBag className="w-3.5 h-3.5" />
+                All Marketplace Orders
+              </button>
+              <button
                 onClick={() => setActiveAdminTab('users')}
                 className={`px-3 py-1 rounded-md font-medium flex items-center gap-1.5 transition ${
                   activeAdminTab === 'users'
@@ -212,6 +225,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full flex-1 space-y-6">
         {activeAdminTab === 'users' ? (
           <UserManagement currentUser={currentUser} />
+        ) : activeAdminTab === 'orders' ? (
+          <SellerOrdersManager isAdminView={true} />
         ) : (
           <>
             {/* KPI Stats Grid */}

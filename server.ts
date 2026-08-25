@@ -19,12 +19,25 @@ import {
   sanitizeUser,
   getSellerProfileForUser,
 } from './server/authStore';
+import {
+  initializeOrderStore,
+  createOrderAsync,
+  getOrderByIdAsync,
+  getOrdersForSellerAsync,
+  getAllOrdersAsync,
+  updateOrderStatusAsync,
+  markOrderAsReadAsync,
+  getUnreadOrderCountAsync,
+} from './server/orderStore';
 
 dotenv.config();
 
-// Seed initial admin and demo users
+// Seed initial admin and demo users & orders
 initializeInitialUsers().catch((err) => {
   console.warn('[Server Boot] Seeding warning:', err);
+});
+initializeOrderStore().catch((err) => {
+  console.warn('[Server Boot] Order store warning:', err);
 });
 
 // Initialize Express
@@ -357,6 +370,137 @@ Generate:
       success: false,
       error: error.message || 'Failed to generate product copy using Gemini AI.',
     });
+  }
+});
+
+// ----------------------------------------------------
+// E-Commerce Order Management API Endpoints
+// ----------------------------------------------------
+
+// 1. Customer Place Order (Public Endpoint, Server-Authoritative)
+app.post('/api/orders', async (req, res) => {
+  try {
+    const { sellerId, customerName, customerEmail, customerMobile, deliveryAddress, orderNotes, items } = req.body;
+
+    if (!sellerId || !customerName || !customerMobile || !customerEmail || !deliveryAddress || !items) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required order fields: Seller ID, Customer Details, Delivery Address, and Items.',
+      });
+    }
+
+    const order = await createOrderAsync({
+      sellerId,
+      customerName,
+      customerEmail,
+      customerMobile,
+      deliveryAddress,
+      orderNotes,
+      items,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Order created successfully.',
+      order,
+    });
+  } catch (err: any) {
+    console.error('[API Create Order Error]:', err);
+    return res.status(400).json({
+      success: false,
+      error: err.message || 'Failed to place order. Please verify order details and try again.',
+    });
+  }
+});
+
+// 2. List Orders (Admin & Seller Protected)
+app.get('/api/orders', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const user = req.user!;
+    let orders = [];
+
+    if (user.role === 'ADMIN') {
+      const targetSellerId = req.query.sellerId as string;
+      if (targetSellerId && targetSellerId !== 'all') {
+        orders = await getOrdersForSellerAsync(targetSellerId);
+      } else {
+        orders = await getAllOrdersAsync();
+      }
+    } else {
+      // Seller / Employee view only their seller orders
+      const sellerId = user.sellerId || (req.query.sellerId as string) || 'demo-abc-enterprises';
+      orders = await getOrdersForSellerAsync(sellerId);
+    }
+
+    return res.json({ success: true, orders });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to retrieve orders.' });
+  }
+});
+
+// 3. Get Single Order Details (Customer / Seller / Admin)
+app.get('/api/orders/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await getOrderByIdAsync(id);
+
+    if (!order) {
+      return res.status(404).json({ success: false, error: `Order "${id}" was not found.` });
+    }
+
+    return res.json({ success: true, order });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to retrieve order details.' });
+  }
+});
+
+// 4. Update Order Status (Seller / Admin Protected)
+app.patch('/api/orders/:id/status', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { status, note } = req.body;
+
+    if (!status) {
+      return res.status(400).json({ success: false, error: 'Status is required.' });
+    }
+
+    const order = await getOrderByIdAsync(id);
+    if (!order) {
+      return res.status(404).json({ success: false, error: 'Order not found.' });
+    }
+
+    // Role check: Admin can update any, Seller can only update their own
+    if (req.user!.role !== 'ADMIN' && req.user!.sellerId && req.user!.sellerId !== order.sellerId) {
+      return res.status(403).json({ success: false, error: 'Permission denied for this order.' });
+    }
+
+    const updated = await updateOrderStatusAsync(id, status, note);
+    return res.json({ success: true, order: updated });
+  } catch (err: any) {
+    return res.status(400).json({ success: false, error: err.message || 'Failed to update order status.' });
+  }
+});
+
+// 5. Mark Order as Read by Seller (Clears notification badge)
+app.patch('/api/orders/:id/read', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const updated = await markOrderAsReadAsync(id);
+    return res.json({ success: true, order: updated });
+  } catch (err: any) {
+    return res.status(400).json({ success: false, error: err.message || 'Failed to mark order as read.' });
+  }
+});
+
+// 6. Get Unread Order Count for Seller Badge
+app.get('/api/orders/badge/unread-count', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const user = req.user!;
+    const sellerId = user.role === 'ADMIN' ? 'all' : user.sellerId || 'demo-abc-enterprises';
+    const unreadCount = await getUnreadOrderCountAsync(sellerId);
+    return res.json({ success: true, unreadCount });
+  } catch (err: any) {
+    return res.json({ success: true, unreadCount: 0 });
   }
 });
 

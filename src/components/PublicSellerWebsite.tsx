@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Building2,
   Phone,
@@ -19,7 +19,12 @@ import {
   Clock,
   Tag,
   Search,
-  Filter
+  Filter,
+  ShoppingBag,
+  ShoppingCart,
+  Plus,
+  Minus,
+  Check
 } from 'lucide-react';
 import {
   SellerProfile,
@@ -27,9 +32,20 @@ import {
   Category,
   WebsiteDesignSettings,
   SocialLinksSettings,
-  SeoSettings
+  SeoSettings,
+  CartItem,
+  Order
 } from '../types';
 import { SparkGenLogo } from './SparkGenLogo';
+import { CartDrawer } from './CartDrawer';
+import { CheckoutModal } from './CheckoutModal';
+import { OrderConfirmationModal } from './OrderConfirmationModal';
+import { OrderDetailsModal } from './OrderDetailsModal';
+import {
+  getStoredCart,
+  saveStoredCart,
+  clearStoredCart,
+} from '../lib/orderService';
 
 interface PublicSellerWebsiteProps {
   seller: SellerProfile;
@@ -60,6 +76,78 @@ export const PublicSellerWebsite: React.FC<PublicSellerWebsiteProps> = ({
   const [rfqNotes, setRfqNotes] = useState<string>('');
   const [rfqContactName, setRfqContactName] = useState<string>('');
   const [rfqContactPhone, setRfqContactPhone] = useState<string>('');
+
+  // Shopping Cart & E-Commerce State
+  const [cartItems, setCartItems] = useState<CartItem[]>(() => getStoredCart(seller.id));
+  const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState<boolean>(false);
+  const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
+  const [isConfirmationOpen, setIsConfirmationOpen] = useState<boolean>(false);
+  const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
+  const [addedToast, setAddedToast] = useState<string | null>(null);
+  const [productDetailQty, setProductDetailQty] = useState<number>(1);
+
+  // Sync cart changes with localStorage
+  useEffect(() => {
+    saveStoredCart(seller.id, cartItems);
+  }, [cartItems, seller.id]);
+
+  const handleAddToCart = (product: Product, quantity = 1) => {
+    const qtyToAdd = Math.max(1, quantity);
+    setCartItems((prev) => {
+      const existingIndex = prev.findIndex((item) => item.product.id === product.id);
+      if (existingIndex >= 0) {
+        const updated = [...prev];
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          quantity: updated[existingIndex].quantity + qtyToAdd,
+        };
+        return updated;
+      } else {
+        return [...prev, { product, quantity: qtyToAdd }];
+      }
+    });
+
+    setAddedToast(`Added "${product.name.slice(0, 28)}..." to cart`);
+    setTimeout(() => setAddedToast(null), 3000);
+  };
+
+  const handleUpdateCartQuantity = (productId: string, delta: number) => {
+    setCartItems((prev) =>
+      prev
+        .map((item) => {
+          if (item.product.id === productId) {
+            const newQty = item.quantity + delta;
+            return newQty > 0 ? { ...item, quantity: newQty } : null;
+          }
+          return item;
+        })
+        .filter(Boolean) as CartItem[]
+    );
+  };
+
+  const handleRemoveCartItem = (productId: string) => {
+    setCartItems((prev) => prev.filter((item) => item.product.id !== productId));
+  };
+
+  const handleClearCart = () => {
+    setCartItems([]);
+    clearStoredCart(seller.id);
+  };
+
+  const handleProceedToCheckout = () => {
+    setIsCartOpen(false);
+    setIsCheckoutOpen(true);
+  };
+
+  const handleOrderSuccess = (order: Order) => {
+    setCartItems([]);
+    setIsCheckoutOpen(false);
+    setConfirmedOrder(order);
+    setIsConfirmationOpen(true);
+  };
+
+  const totalCartCount = cartItems.reduce((acc, item) => acc + (item.quantity || 1), 0);
 
   const activeSocials = (socialLinks?.links || []).filter((s) => s.isEnabled && s.value.trim());
 
@@ -162,6 +250,21 @@ export const PublicSellerWebsite: React.FC<PublicSellerWebsiteProps> = ({
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Cart Button */}
+            <button
+              onClick={() => setIsCartOpen(true)}
+              className="relative p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 transition-colors flex items-center gap-2 cursor-pointer"
+              title="View Shopping Cart"
+            >
+              <ShoppingCart className="w-4 h-4 text-slate-700" />
+              <span className="hidden sm:inline text-xs font-bold text-slate-800">Cart</span>
+              {totalCartCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-sky-600 text-white text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-xs animate-scale">
+                  {totalCartCount}
+                </span>
+              )}
+            </button>
+
             {whatsappLink && (
               <button
                 onClick={() => handleOpenWhatsAppEnquiry()}
@@ -405,27 +508,42 @@ export const PublicSellerWebsite: React.FC<PublicSellerWebsiteProps> = ({
                       )}
 
                       {/* Price & Action */}
-                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                        <div>
-                          <span className="text-[10px] text-slate-400 block font-medium">Wholesale Price</span>
-                          <div className="flex items-baseline gap-1">
-                            <span className="text-lg font-extrabold text-slate-900">
-                              ₹{prod.price.toLocaleString()}
-                            </span>
-                            <span className="text-xs text-slate-500 font-medium">/ {prod.unit}</span>
+                      <div className="pt-3 border-t border-slate-100 flex flex-col gap-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-[10px] text-slate-400 block font-medium">Wholesale Price</span>
+                            <div className="flex items-baseline gap-1">
+                              <span className="text-lg font-extrabold text-slate-900">
+                                ₹{prod.price.toLocaleString()}
+                              </span>
+                              <span className="text-xs text-slate-500 font-medium">/ {prod.unit}</span>
+                            </div>
                           </div>
-                          <span className="text-[10px] text-blue-600 font-semibold">
+                          <span className="text-[10px] text-blue-600 font-semibold bg-blue-50 px-2 py-1 rounded">
                             MOQ: {prod.minOrderQuantity} {prod.unit}s
                           </span>
                         </div>
 
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => setSelectedProduct(prod)}
-                            className="px-3.5 py-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-semibold transition"
+                            onClick={() => handleAddToCart(prod, 1)}
+                            className="flex-1 py-2 px-3 rounded-xl bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
                           >
-                            Details & RFQ
+                            <ShoppingCart className="w-3.5 h-3.5" />
+                            <span>Add to Cart</span>
                           </button>
+
+                          <button
+                            onClick={() => {
+                              setSelectedProduct(prod);
+                              setProductDetailQty(prod.minOrderQuantity || 1);
+                            }}
+                            className="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 text-xs font-semibold transition"
+                            title="Product Details"
+                          >
+                            Details
+                          </button>
+
                           {whatsappLink && (
                             <button
                               onClick={() => handleOpenWhatsAppEnquiry(prod.name)}
@@ -708,15 +826,59 @@ export const PublicSellerWebsite: React.FC<PublicSellerWebsiteProps> = ({
                       Minimum Order Quantity: {selectedProduct.minOrderQuantity} {selectedProduct.unit}s
                     </p>
                   </div>
-                  {whatsappLink && (
+
+                  {/* Add to Cart Section */}
+                  <div className="pt-3 mt-3 border-t border-slate-200 space-y-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-700">Order Qty:</span>
+                      <div className="flex items-center border border-slate-300 rounded-lg bg-white overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setProductDetailQty((q) => Math.max(1, q - 1))}
+                          className="px-2.5 py-1 text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          min="1"
+                          value={productDetailQty}
+                          onChange={(e) => setProductDetailQty(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-14 text-center text-xs font-bold text-slate-900 border-x border-slate-200 py-1 focus:outline-hidden"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setProductDetailQty((q) => q + 1)}
+                          className="px-2.5 py-1 text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                        >
+                          +
+                        </button>
+                      </div>
+                      <span className="text-xs text-slate-500">{selectedProduct.unit}s</span>
+                    </div>
+
                     <button
-                      onClick={() => handleOpenWhatsAppEnquiry(selectedProduct.name)}
-                      className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm"
+                      type="button"
+                      onClick={() => {
+                        handleAddToCart(selectedProduct, productDetailQty);
+                        setSelectedProduct(null);
+                      }}
+                      className="w-full py-2.5 px-4 rounded-xl bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-xs cursor-pointer transition"
                     >
-                      <MessageSquare className="w-4 h-4" />
-                      Enquire on WhatsApp
+                      <ShoppingCart className="w-4 h-4" />
+                      <span>Add {productDetailQty} to Shopping Cart</span>
                     </button>
-                  )}
+
+                    {whatsappLink && (
+                      <button
+                        onClick={() => handleOpenWhatsAppEnquiry(selectedProduct.name)}
+                        className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition"
+                      >
+                        <MessageSquare className="w-4 h-4" />
+                        Enquire on WhatsApp
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -819,6 +981,62 @@ export const PublicSellerWebsite: React.FC<PublicSellerWebsiteProps> = ({
           </div>
         </div>
       )}
+
+      {/* Cart Toast Notification */}
+      {addedToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl border border-slate-700 text-xs flex items-center gap-2.5 animate-in slide-in-from-bottom-2">
+          <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span className="font-semibold">{addedToast}</span>
+          <button
+            onClick={() => setIsCartOpen(true)}
+            className="ml-2 px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-[11px] font-bold cursor-pointer"
+          >
+            View Cart
+          </button>
+        </div>
+      )}
+
+      {/* Shopping Cart Drawer */}
+      <CartDrawer
+        isOpen={isCartOpen}
+        onClose={() => setIsCartOpen(false)}
+        sellerId={seller.id}
+        sellerName={seller.companyName}
+        cartItems={cartItems}
+        onUpdateQuantity={handleUpdateCartQuantity}
+        onRemoveItem={handleRemoveCartItem}
+        onClearCart={handleClearCart}
+        onCheckout={handleProceedToCheckout}
+      />
+
+      {/* Checkout Modal */}
+      <CheckoutModal
+        isOpen={isCheckoutOpen}
+        onClose={() => setIsCheckoutOpen(false)}
+        sellerId={seller.id}
+        sellerName={seller.companyName}
+        cartItems={cartItems}
+        onOrderSuccess={handleOrderSuccess}
+      />
+
+      {/* Order Confirmation Modal */}
+      <OrderConfirmationModal
+        order={confirmedOrder}
+        isOpen={isConfirmationOpen}
+        onClose={() => setIsConfirmationOpen(false)}
+        onViewOrderDetails={(order) => {
+          setIsConfirmationOpen(false);
+          setViewingOrder(order);
+        }}
+      />
+
+      {/* Order Details Modal (Customer Read-Only View) */}
+      <OrderDetailsModal
+        order={viewingOrder}
+        isOpen={!!viewingOrder}
+        onClose={() => setViewingOrder(null)}
+        isEditable={false}
+      />
     </div>
   );
 };

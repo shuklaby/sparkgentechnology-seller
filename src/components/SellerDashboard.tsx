@@ -65,6 +65,9 @@ import {
 } from '../lib/dbService';
 import { ProductEditorModal } from './ProductEditorModal';
 import { PublicSellerWebsite } from './PublicSellerWebsite';
+import { SellerOrdersManager } from './SellerOrdersManager';
+import { fetchUnreadOrdersCount } from '../lib/orderService';
+import { ShoppingBag } from 'lucide-react';
 
 interface SellerDashboardProps {
   seller: SellerProfile;
@@ -77,9 +80,10 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
   onUpdateSeller,
   onLogout,
 }) => {
-  // Navigation tabs matching the exact 10 sections requested
+  // Navigation tabs matching sections
   const [activeTab, setActiveTab] = useState<
     | 'dashboard'
+    | 'orders'
     | 'company_profile'
     | 'product_catalog'
     | 'categories'
@@ -97,6 +101,7 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
   const [socialLinks, setSocialLinks] = useState<SocialLinksSettings | null>(null);
   const [seoSettings, setSeoSettings] = useState<SeoSettings | null>(null);
   const [domainRecord, setDomainRecord] = useState<DomainRecord | null>(null);
+  const [unreadOrdersCount, setUnreadOrdersCount] = useState<number>(0);
 
   const [isLoading, setIsLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -121,13 +126,14 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
   const loadSellerData = async () => {
     setIsLoading(true);
     try {
-      const [prods, cats, design, socials, seo, domain] = await Promise.all([
+      const [prods, cats, design, socials, seo, domain, unreadCount] = await Promise.all([
         getProducts(seller.id),
         getCategories(seller.id),
         getWebsiteDesignSettings(seller.id),
         getSocialLinks(seller.id),
         getSeoSettings(seller.id),
         getDomainRecord(seller.id),
+        fetchUnreadOrdersCount(seller.id).catch(() => 0),
       ]);
       setProducts(prods);
       setCategories(cats);
@@ -135,6 +141,7 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
       setSocialLinks(socials);
       setSeoSettings(seo);
       setDomainRecord(domain);
+      setUnreadOrdersCount(unreadCount);
       setProfileForm({ ...seller });
     } catch (err) {
       console.warn('Error loading seller data:', err);
@@ -145,6 +152,13 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
 
   useEffect(() => {
     loadSellerData();
+    const interval = setInterval(async () => {
+      try {
+        const count = await fetchUnreadOrdersCount(seller.id);
+        setUnreadOrdersCount(count);
+      } catch {}
+    }, 15000);
+    return () => clearInterval(interval);
   }, [seller.id]);
 
   // Handlers for Profile
@@ -312,6 +326,7 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
 
   const navItems: NavItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'orders', label: 'Orders & Sales', icon: ShoppingBag, badge: unreadOrdersCount },
     { id: 'company_profile', label: 'Company Profile', icon: Building2 },
     { id: 'product_catalog', label: 'Product Catalog', icon: Package, badge: products.length },
     { id: 'categories', label: 'Categories', icon: Layers, badge: categories.length },
@@ -602,6 +617,14 @@ export const SellerDashboard: React.FC<SellerDashboardProps> = ({
                 </table>
               </div>
             </div>
+          )}
+
+          {/* TAB: ORDERS & SALES */}
+          {activeTab === 'orders' && (
+            <SellerOrdersManager
+              sellerId={seller.id}
+              sellerCompanyName={seller.companyName}
+            />
           )}
 
           {/* TAB 2: COMPANY PROFILE */}

@@ -1,6 +1,6 @@
 {
   "name": "Spark Gen Technology | Seller Portal & Admin Platform",
-  "description": "Multi-tenant B2B seller catalog management, website builder with live templates, SEO, custom domains, AI product copy generator, and secure admin user management.",
+  "description": "Multi-tenant B2B seller catalog management, full e-commerce ordering system with shopping cart, checkout, email notifications, order management dashboard, website builder with live templates, SEO, and custom domains.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

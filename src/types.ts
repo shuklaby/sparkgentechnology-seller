@@ -61,6 +61,8 @@ export interface Product {
   categoryName: string;
   subCategory?: string;
   minOrderQuantity: number;
+  stockQuantity?: number; // Available inventory count
+  inStock?: boolean;
   isPublished: boolean;
   images: string[];
   specifications: ProductSpecification[];
@@ -175,3 +177,73 @@ export interface AdminStats {
   publishedWebsites: number;
   customDomainsConnected: number;
 }
+
+// ----------------------------------------------------
+// E-Commerce Ordering System Types
+// ----------------------------------------------------
+
+export type OrderStatus = 'NEW' | 'CONFIRMED' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED';
+
+export interface OrderItem {
+  productId: string;
+  productName: string;
+  productImage?: string;
+  sku?: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+  unit?: string;
+}
+
+export interface OrderDeliveryAddress {
+  fullName: string;
+  mobileNumber: string;
+  email: string;
+  houseNumber: string;
+  streetArea: string;
+  city: string;
+  state: string;
+  pincode: string;
+  landmark?: string;
+  fullAddress: string;
+}
+
+export interface Order {
+  id: string; // e.g. ORD-2026-000001
+  sellerId: string;
+  sellerName?: string;
+  customerName: string;
+  customerEmail: string;
+  customerMobile: string;
+  deliveryAddress: OrderDeliveryAddress;
+  orderNotes?: string;
+  items: OrderItem[];
+  itemCount: number;
+  subtotal: number;
+  shippingFee: number;
+  totalAmount: number;
+  currency: string;
+  status: OrderStatus;
+  isReadBySeller: boolean;
+  emailSent?: boolean;
+  createdAt: number;
+  updatedAt: number;
+  timeline?: Array<{
+    status: OrderStatus;
+    timestamp: number;
+    note?: string;
+  }>;
+}
+
+export interface CartItem {
+  product: Product;
+  quantity: number;
+}
+
+export interface CartState {
+  items: CartItem[];
+  totalQuantity: number;
+  subtotal: number;
+  total: number;
+}
+
