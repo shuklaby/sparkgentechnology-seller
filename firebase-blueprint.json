@@ -1,0 +1,41 @@
+{
+  "entities": {
+    "User": {
+      "collection": "users",
+      "fields": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "phoneNumber": { "type": "string", "description": "Authenticated phone number with country code" },
+        "role": { "type": "string", "description": "User role: ADMIN or SELLER" },
+        "sellerId": { "type": "string", "description": "Optional seller ID linked to profile" },
+        "displayName": { "type": "string", "description": "User display title" },
+        "createdAt": { "type": "number", "description": "Timestamp in milliseconds" },
+        "lastLoginAt": { "type": "number", "description": "Timestamp in milliseconds" }
+      }
+    },
+    "Seller": {
+      "collection": "sellers",
+      "fields": {
+        "id": { "type": "string", "description": "Seller Profile ID" },
+        "companyName": { "type": "string", "description": "Company legal or trade name" },
+        "slug": { "type": "string", "description": "Unique URL identifier for tenant website" },
+        "logoUrl": { "type": "string", "description": "Logo URL" },
+        "businessDescription": { "type": "string", "description": "Summary of products and operations" },
+        "mobileNumber": { "type": "string", "description": "Contact phone" },
+        "whatsappNumber": { "type": "string", "description": "WhatsApp contact" },
+        "email": { "type": "string", "description": "Inquiry email" },
+        "address": { "type": "string", "description": "Factory or office address" },
+        "city": { "type": "string", "description": "City" },
+        "state": { "type": "string", "description": "State / Province" },
+        "country": { "type": "string", "description": "Country" },
+        "pincode": { "type": "string", "description": "Postal code" },
+        "businessType": { "type": "string", "description": "Manufacturer / Wholesaler / Exporter" },
+        "yearEstablished": { "type": "number", "description": "Year founded" },
+        "isActive": { "type": "boolean", "description": "Admin operational status" },
+        "isPublished": { "type": "boolean", "description": "Public visibility flag" },
+        "ownerUid": { "type": "string", "description": "Firebase UID of tenant owner" },
+        "createdAt": { "type": "number", "description": "Creation timestamp" },
+        "updatedAt": { "type": "number", "description": "Update timestamp" }
+      }
+    }
+  }
+}

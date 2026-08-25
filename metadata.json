@@ -1,0 +1,8 @@
+{
+  "name": "B2B Seller Catalog & Website Builder",
+  "description": "Multi-tenant B2B seller catalog management, website builder with live templates, SEO, custom domains, and AI product copy generator.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
